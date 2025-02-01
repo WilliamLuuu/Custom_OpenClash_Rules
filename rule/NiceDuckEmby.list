@@ -1,0 +1,11 @@
+# NAME: NiceDuckEmby 补充规则
+# AUTHOR: WilliamLuuu
+# NiceDuckEmby 服务的相关规则
+payload:
+ - DOMAIN,jms1.niceduck.lol
+ - DOMAIN,jms2.niceduck.lol
+ - DOMAIN,jms1v6.niceduck.lol
+ - DOMAIN,1111cuct.niceduck.lol
+ - DOMAIN,dpx1.niceduck.lol
+ - DOMAIN,dpx2.niceduck.lol
+ - DOMAIN,dpx1v6.niceduck.lol
