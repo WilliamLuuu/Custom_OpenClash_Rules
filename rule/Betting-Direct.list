@@ -3,12 +3,15 @@
 # REPO: https://github.com/WilliamLuuu/Custom_OpenClash_Rules
 # 大陆境内博彩直连域名列表，来自个人收集
 
+#IP归属ipify
+DOMAIN-KEYWORD,ipify
 
 # IM体育/电竞
 DOMAIN-KEYWORD,imdj
 DOMAIN-KEYWORD,imes
 DOMAIN-KEYWORD,imsb
 DOMAIN-KEYWORD,imem
+DOMAIN-KEYWORD,imsp
 DOMAIN-KEYWORD,mlycdn
 DOMAIN-KEYWORD,roshan
 DOMAIN-KEYWORD,silver01
@@ -21,6 +24,7 @@ DOMAIN-KEYWORD,esportstatspro
 DOMAIN-KEYWORD,bmyy520
 DOMAIN-KEYWORD,ipis-cdn
 DOMAIN-KEYWORD,utoyen
+DOMAIN-KEYWORD,inodeninja
   
 # NG28南宫28
 DOMAIN-KEYWORD,ng28
