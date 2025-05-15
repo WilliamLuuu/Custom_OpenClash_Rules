@@ -56,8 +56,8 @@ DOMAIN-KEYWORD,ilustrepro
 DOMAIN-KEYWORD,ajj123
 DOMAIN-KEYWORD,newsbaidu
 DOMAIN-KEYWORD,news1baidu
-DOMAIN-SUFFIX,api-baidu.com
-DOMAIN-SUFFIX,cgi-baidu.com
+DOMAIN-KEYWORD,api\-baidu
+DOMAIN-KEYWORD,cgi\-baidu
 DOMAIN-KEYWORD,wsoss
 DOMAIN-KEYWORD,cloudfront
 
