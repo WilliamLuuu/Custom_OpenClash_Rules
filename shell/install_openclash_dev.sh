@@ -11,8 +11,8 @@ JSON_OUTPUT=$(curl -s $REPO_API_URL)
 APK_FILE=$(echo "$JSON_OUTPUT" | awk -F'"' '/"name":/ && /.apk"/ {print $4}' | head -n 1)
 
 # 打印调试信息
-echo "API 输出内容:"
-echo "$JSON_OUTPUT"
+#echo "API 输出内容:"
+#echo "$JSON_OUTPUT"
 echo "解析到的文件名: $APK_FILE"
 
 # 检查是否成功获取文件名
@@ -34,7 +34,7 @@ fi
 
 # 安装 .apk 文件
 echo "正在安装 $APK_FILE..."
-apk add $TEMP_FILE --allow-untrusted
+apk add -q --force-overwrite --clean-protected --allow-untrusted $TEMP_FILE
 if [ $? -ne 0 ]; then
   echo "安装失败，请检查系统环境。"
   rm -f $TEMP_FILE

@@ -2,7 +2,7 @@
 
 # 定义变量
 REPO_API_URL="https://api.github.com/repos/vernesong/OpenClash/contents/dev?ref=package"
-RAW_FILE_PREFIX="https://gh-proxy.com/https://gh-proxy.com/https://raw.githubusercontent.com/vernesong/OpenClash/package/dev"
+RAW_FILE_PREFIX="https://gh-proxy.com/https://raw.githubusercontent.com/vernesong/OpenClash/package/dev"
 TEMP_FILE="openclash.ipk"
 
 # 获取 JSON 数据并解析 .ipk 文件名
@@ -11,8 +11,8 @@ JSON_OUTPUT=$(curl -s $REPO_API_URL)
 IPK_FILE=$(echo "$JSON_OUTPUT" | awk -F'"' '/"name":/ && /.ipk"/ {print $4}' | head -n 1)
 
 # 打印调试信息
-echo "API 输出内容:"
-echo "$JSON_OUTPUT"
+#echo "API 输出内容:"
+#echo "$JSON_OUTPUT"
 echo "解析到的文件名: $IPK_FILE"
 
 # 检查是否成功获取文件名
@@ -122,4 +122,4 @@ echo "订阅更新完成！"
 
 sleep 3
 echo "启动 OpenClash ..."
-/etc/init.d/openclash restart
+/etc/init.d/openclash restart >/dev/null 2>&1
