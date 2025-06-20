@@ -119,6 +119,10 @@ DOMAIN-SUFFIX,daxiaamu.com
 # 健康医疗
 # 欧态
 DOMAIN-SUFFIX,ottai.com
+# 日常生活
+# 闲卡宝
+DOMAIN-SUFFIX, xiankabao.com
+
 
 # =======================================
 # 以下是应当直连的冷门国内域名规则
