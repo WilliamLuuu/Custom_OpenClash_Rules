@@ -64,6 +64,7 @@ DOMAIN-SUFFIX,cgi-baidu.com
 DOMAIN-KEYWORD,wsoss
 DOMAIN-KEYWORD,cloudfront
 DOMAIN-KEYWORD,sjdydj
+DOMAIN-SUFFIX,laner220.com
 
   
 # sb沙巴
@@ -72,7 +73,10 @@ DOMAIN-KEYWORD,a2q2
 DOMAIN-KEYWORD,trivenzio
 DOMAIN-KEYWORD,sddolo
 DOMAIN-SUFFIX,s-qec.com
-
+DOMAIN-SUFFIX,mlytics.com
+DOMAIN-SUFFIX,fusioncdn.com
+DOMAIN-KEYWORD,yhn8523
+DOMAIN-SUFFIX,bovrwp00g.com
   
 # Betboom.ru
 #DOMAIN-KEYWORD,betboom
@@ -93,7 +97,6 @@ DOMAIN-SUFFIX,365livesport.org
 # Bet365
 DOMAIN-KEYWORD,365365
 
-# 沙巴电竞
-DOMAIN-SUFFIX,mlytics.com
-DOMAIN-SUFFIX,fusioncdn.com
-DOMAIN-KEYWORD,yhn8523
+
+# Pinnacle平博
+DOMAIN-SUFFIX,lkj7531.com
