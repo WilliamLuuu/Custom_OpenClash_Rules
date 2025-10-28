@@ -7,6 +7,7 @@
 DOMAIN,www.okx.com.cdn.cloudflare.net
 DOMAIN-SUFFIX,oklink.com
 DOMAIN-KEYWORD,coinall
+DOMAIN,web3.okx.com.cdn.cloudflare.net
 
 # Binance
 DOMAIN-SUFFIX,binance.com
