@@ -6,5 +6,5 @@
 
 # LyreBirdVPN
 DOMAIN-SUFFIX,ppooqq.top
-IP-CIDR,38.59.246.49/32,no-resolve
+DOMAIN,38.59.246.49
 
