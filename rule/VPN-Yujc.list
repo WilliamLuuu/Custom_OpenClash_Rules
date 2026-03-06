@@ -1,0 +1,12 @@
+# NAME: VPN-Yujc
+# AUTHOR: WilliamLuuu
+# REPO: https://github.com/WilliamLuuu/Custom_OpenClash_Rules
+# 鱼鱼的超级机场域名列表，来自个人收集
+
+
+# YujcVPN
+DOMAIN-SUFFIX,543984.xyz
+DOMAIN-SUFFIX,dpdns.org
+IP-CIDR,13.229.76.202/32
+IP-CIDR,79.72.95.9/32
+IP-CIDR,152.67.1.223
