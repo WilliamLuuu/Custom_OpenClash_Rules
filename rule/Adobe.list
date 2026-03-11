@@ -1,5 +1,37 @@
 # NAME: Adobe规则
 # AUTHOR: WilliamLuuu
+# Update time：2026-03-11
+# 感谢：https://github.com/743859910/OpenHosts
+# Update url：https://raw.githubusercontent.com/743859910/OpenHosts/master/Adobe_Hosts.txt
 # Adobe域名规则
 
 DOMAIN-SUFFIX,adobe.io
+DOMAIN,activate.adobe.com
+DOMAIN,practivate.adobe.com
+DOMAIN,ereg.adobe.com
+DOMAIN,activate.wip3.adobe.com
+DOMAIN,wip3.adobe.com
+DOMAIN,3dns-3.adobe.com
+DOMAIN,3dns-2.adobe.com
+DOMAIN,adobe-dns.adobe.com
+DOMAIN,adobe-dns-2.adobe.com
+DOMAIN,adobe-dns-3.adobe.com
+DOMAIN,ereg.wip3.adobe.com
+DOMAIN,activate-sea.adobe.com
+DOMAIN,wwis-dubc1-vip60.adobe.com
+DOMAIN,activate-sjc0.adobe.com
+DOMAIN,server.messaging.adobe.com
+DOMAIN,ss-prod-va6c2-notif-va6cadobess.com
+DOMAIN,sstats.adobe.com
+DOMAIN,stats.adobe.com:1 udps.adobe.com
+DOMAIN,ui.messaging.adobe.com
+DOMAIN,utut-service.adobe.com
+DOMAIN,www.adobe.com
+DOMAIN,ims-prod0adobelogin.com
+DOMAIN,cc-api-data.adobe.io
+DOMAIN,mds-cdn.infra.adobesensei.io
+DOMAIN,ss-prod-va6c2-ns.va6cadobess.com
+DOMAIN,lmlicenses.wip4.adobe.com
+DOMAIN,lm.licenses.adobe.com
+DOMAIN,na1r.services.adobe.com
+DOMAIN,hlrcv.stage.adobe.com
