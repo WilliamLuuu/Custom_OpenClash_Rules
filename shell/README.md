@@ -25,8 +25,8 @@
 ## 🔍 **check_cpu_version.sh**
 
 <p>
-  <img src="https://img.shields.io/badge/Function-CPU_Detect-blue?style=flat-square">
-  <img src="https://img.shields.io/badge/Arch-Multi--Arch-orange?style=flat-square">
+  <img src="https://img.shields.io/badge/Function-CPU_Detect-blue?style=flat-square" alt="Function: CPU Detect">
+  <img src="https://img.shields.io/badge/Arch-Multi--Arch-orange?style=flat-square" alt="Arch: Multi-Arch">
 </p>
 
 **功能说明：**  
@@ -42,7 +42,8 @@
 **使用命令：**
 
 ```bash
-wget -qO- https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@refs/heads/main/shell/check_cpu_version.sh | sh
+RULES_BRANCH="${RULES_BRANCH:-main}"
+wget -qO- "https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@refs/heads/${RULES_BRANCH}/shell/check_cpu_version.sh" | sh
 ```
 
 <details>
@@ -66,9 +67,9 @@ linux-mips-hardfloat
 ## 📦 **install_openclash_dev.sh**
 
 <p>
-  <img src="https://img.shields.io/badge/Function-Install-green?style=flat-square">
-  <img src="https://img.shields.io/badge/Edition-Basic-lightgrey?style=flat-square">
-  <img src="https://img.shields.io/badge/Manager-OPKG%2FAPK-blueviolet?style=flat-square">
+  <img src="https://img.shields.io/badge/Function-Install-green?style=flat-square" alt="Function: Install">
+  <img src="https://img.shields.io/badge/Edition-Basic-lightgrey?style=flat-square" alt="Edition: Basic">
+  <img src="https://img.shields.io/badge/Manager-OPKG%2FAPK-blueviolet?style=flat-square" alt="Manager: OPKG/APK">
 </p>
 
 **功能说明：**  
@@ -78,7 +79,7 @@ OpenClash Dev 版本安装工具。仅包含**安装插件本体**并**更新 Me
 
 - ✅ **双包管理器支持**：自动适配 `OPKG` (OpenWrt) 和 `APK` (Snapshot)。
 - ✅ **内核自动更新**：安装完成后立即调用内部脚本更新 Meta 内核，无需二次操作。
-- ✅ **配置初始化**：自动切换至 Dev 更新分支并配置 jsDelivr CDN 加速。
+- ✅ **配置初始化**：自动切换至 Dev 更新分支并配置下载源（如 jsDelivr）。
 
 **使用场景：**
 
@@ -88,7 +89,8 @@ OpenClash Dev 版本安装工具。仅包含**安装插件本体**并**更新 Me
 **使用命令：**
 
 ```bash
-wget -qO- https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@refs/heads/main/shell/install_openclash_dev.sh | sh
+RULES_BRANCH="${RULES_BRANCH:-main}"
+wget -qO- "https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@refs/heads/${RULES_BRANCH}/shell/install_openclash_dev.sh" | sh
 ```
 
 ---
@@ -96,20 +98,20 @@ wget -qO- https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@
 ## 🚀 **install_openclash_dev_update.sh**
 
 <p>
-  <img src="https://img.shields.io/badge/Function-Full_Update-brightgreen?style=flat-square">
-  <img src="https://img.shields.io/badge/Edition-Ultimate-gold?style=flat-square">
-  <img src="https://img.shields.io/badge/Feature-Smart_Core-ff69b4?style=flat-square">
+  <img src="https://img.shields.io/badge/Function-Full_Update-brightgreen?style=flat-square" alt="Function: Full Update">
+  <img src="https://img.shields.io/badge/Edition-Ultimate-gold?style=flat-square" alt="Edition: Ultimate">
+  <img src="https://img.shields.io/badge/Feature-Smart_Core-ff69b4?style=flat-square" alt="Feature: Smart Core">
 </p>
 
 **功能说明：**  
-全功能安装脚本。集成了环境诊断、抗 DNS 污染、多重下载保障、空间自适应等逻辑。适合首次安装或日常维护。
+全功能安装脚本。集成了环境诊断、多源下载保障、空间自适应等逻辑。适合首次安装或日常维护。
 
 **核心特性：**
 
 - ✅ **🛡️ 防火墙自适应依赖**：自动识别系统防火墙类型（`nftables` / `iptables`），精准安装所需的特定依赖包（如 `kmod-nft-tproxy` vs `iptables-mod-tproxy`）。
 - ✅ **🧠 Smart 内核空间自适应**：在启用 Smart 内核时，自动检测 `/etc/openclash` 剩余空间，自动选择下载 **Large** (30MB+)、**Middle** 或 **Small** 模型，空间极度不足时自动关闭功能，防止爆盘。
-- ✅ **🌐 抗 DNS 污染下载**：内置 GitHub Hosts 获取逻辑，配合 **jsDelivr CDN** -> **解析 IP 直连** -> **反代镜像** 的三级重试机制，极大提高下载成功率。
-- ✅ **⚙️ 全资源同步**：一次运行，同步更新 Meta 内核、GeoIP/GeoSite/GeoASN 数据库、大陆白名单及订阅文件。
+- ✅ **🌐 多源下载回退**：针对网络波动与下载失败，提供多种下载源与重试策略，提高成功率。
+- ✅ **⚙️ 全资源同步**：一次运行，同步更新 Meta 内核、GeoIP/GeoSite/GeoASN 数据库及相关数据文件。
 - ✅ **🧩 个性化扩展**：支持加载 `/etc/config/openclash-set` 用户自定义脚本。
 
 **使用场景：**
@@ -122,7 +124,8 @@ wget -qO- https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@
 **使用命令：**
 
 ```bash
-wget -qO- https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@refs/heads/main/shell/install_openclash_dev_update.sh | sh
+RULES_BRANCH="${RULES_BRANCH:-main}"
+wget -qO- "https://testingcf.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@refs/heads/${RULES_BRANCH}/shell/install_openclash_dev_update.sh" | sh
 ```
 
 ---

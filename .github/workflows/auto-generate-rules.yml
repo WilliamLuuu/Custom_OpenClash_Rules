@@ -9,13 +9,20 @@ on:
 permissions:
   contents: write
 
+env:
+  TARGET_BRANCH: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch) || ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref_name) || (vars.WORK_BRANCH != '' && vars.WORK_BRANCH) || 'main' }}
+
 jobs:
   generate-rules:
+    if: github.event_name != 'push' || github.ref_name == ((vars.WORK_BRANCH != '' && vars.WORK_BRANCH) || 'main')
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.TARGET_BRANCH }}
+          fetch-depth: 0
 
       - name: Set Git identity
         run: |
@@ -23,7 +30,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: '3.x'
 
@@ -39,7 +46,7 @@ jobs:
 
       - name: Generate YAML from LIST files
         run: |
-          FILES=("Custom_Direct" "Custom_Proxy" "Steam_CDN")
+          FILES=("Custom_Direct" "Custom_Proxy" "Steam_CDN" "Encrypted_DNS")
 
           for base_name in "${FILES[@]}"; do
             list_file="rule/${base_name}.list"
@@ -52,11 +59,14 @@ jobs:
             domain_rules=$(grep -E '^(DOMAIN,|DOMAIN-|DOMAIN-SUFFIX|DOMAIN-KEYWORD)' "$list_file" | sed -E "s/^DOMAIN-SUFFIX,(.+)/  - '+.\1'/" | sed -E "s/^DOMAIN-KEYWORD,(.+)/  - '*\1*'/" | sed -E "s/^DOMAIN,(.+)/  - '\1'/" | sort)
             ip_rules=$(grep -E '^(IP-|IP-CIDR)' "$list_file" | sed -E "s/^IP-CIDR,([^,]+).*/  - '\1'/" | sed -E "s/^IP,([^,]+).*/  - '\1'/" | sort)
 
-            classical_rules=$(grep -E '^(DOMAIN,|DOMAIN-|DOMAIN-SUFFIX|DOMAIN-KEYWORD)' "$list_file" | sed -E "s/^(.*)/  - \1/" | sort)
+            classical_rules=$(grep -E '^(DOMAIN,|DOMAIN-|DOMAIN-SUFFIX|DOMAIN-KEYWORD|SRC-PORT)' "$list_file" | sed -E "s/^(.*)/  - \1/" | sort)
             classical_rules+=$'\n'
             classical_rules+=$(grep -E '^(IP-|IP-CIDR)' "$list_file" | sed -E "s/^IP-CIDR,([^,]+).*/  - IP-CIDR,\1,no-resolve/" | sed -E "s/^IP,([^,]+).*/  - IP-CIDR,\1,no-resolve/" | sort)
 
-            classical_ip_rules=$(grep -E '^(IP-|IP-CIDR)' "$list_file" | sed -E "s/^IP-CIDR,([^,]+).*/  - IP-CIDR,\1,no-resolve/" | sed -E "s/^IP,([^,]+).*/  - IP-CIDR,\1,no-resolve/" | sort)
+            classical_ip_rules=$({
+              grep -E '^(IP-|IP-CIDR)' "$list_file" | sed -E "s/^IP-CIDR,([^,]+).*/  - IP-CIDR,\1,no-resolve/" | sed -E "s/^IP,([^,]+).*/  - IP-CIDR,\1,no-resolve/"
+              grep -E '^SRC-PORT' "$list_file" | sed -E "s/^(.*)/  - \1/"
+            } | sort)
 
             generate_and_commit() {
               file="$1"
@@ -65,7 +75,7 @@ jobs:
 
               echo "# Generated from ${list_file}" > "$file"
               echo "# REPO: https://github.com/${{ github.repository }}" >> "$file"
-              echo "# SOURCE: https://github.com/${{ github.repository }}/blob/main/${list_file}" >> "$file"
+              echo "# SOURCE: https://github.com/${{ github.repository }}/blob/${TARGET_BRANCH}/${list_file}" >> "$file"
               echo "# TOTAL: ${total}" >> "$file"
               echo "" >> "$file"
               echo "payload:" >> "$file"
@@ -92,6 +102,11 @@ jobs:
           
           # Convert Domain YAML files
           for yaml_file in rule/*_Domain.yaml; do
+            if ! grep -q '^  - ' "$yaml_file"; then
+              echo "Skipping $yaml_file (no domain rules)"
+              continue
+            fi
+
             mrs_file="${yaml_file%.yaml}.mrs"
             echo "Converting $yaml_file to $mrs_file (domain behavior)"
             mihomo convert-ruleset domain yaml "$yaml_file" "$mrs_file"
@@ -119,6 +134,11 @@ jobs:
               echo "Skipping $yaml_file (Classical format not supported in MRS)"
               continue
             fi
+
+            if ! grep -q '^  - ' "$yaml_file"; then
+              echo "Skipping $yaml_file (no IP rules)"
+              continue
+            fi
             
             mrs_file="${yaml_file%.yaml}.mrs"
             echo "Converting $yaml_file to $mrs_file (ipcidr behavior)"
@@ -144,8 +164,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [[ -n $(git log origin/main..HEAD) ]]; then
-            git push origin HEAD:main
-          else
-            echo "No new commits to push."
-          fi
+          git push origin "HEAD:${TARGET_BRANCH}"
