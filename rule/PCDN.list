@@ -1,0 +1,174 @@
+# PCDN Filter List
+# 整理、合并自多个来源
+# 更新时间: 2026-03-11
+# 来源: https://github.com/smdx/AdGHome_Filter_List/blob/main/AdGHome-PCDN.txt
+# - https://github.com/Womsxd/MyAdBlockRules
+# - https://github.com/4fuu/AdGuard-Home-PCDN
+# - https://github.com/743859910/OpenHosts
+# - https://github.com/susetao/PCDNFilter-CHN-
+# - https://github.com/thhbdd/Block-pcdn-domains
+#
+# 注意：手动添加的规则请放在文件的"自定义规则"部分
+#
+
+# 腾讯
+DOMAIN-SUFFIX,stun.qqlive.qq.com
+DOMAIN-SUFFIX,musicstun.p2p.qq.com
+DOMAIN-SUFFIX,p2p.qq.com
+DOMAIN-SUFFIX,p2ptun.qq.com
+DOMAIN-SUFFIX,p2pupdate.gamedl.qq.com
+DOMAIN-SUFFIX,p2pupgrade.gamedl.qq.com
+# 上面两个的cname解析结果
+DOMAIN-SUFFIX,stun-a1.qq.com
+# 疑似腾讯云stun服务器
+DOMAIN-SUFFIX,signal.qvb.qcloud.com
+# stun*.qvb.qcloud.com
+
+# 快手
+# /^(.+)-p2p-pull\.(video|live)-voip\.com$/
+# /^(.+)-p2p\.pull\.yximgs\.com$/
+# /^(.+)-p2p-(.+)\.pull\.yximgs\.com$/
+DOMAIN-SUFFIX,pcdn.yximgs.com
+# ||config-p2p-*.vcloud.ks-live.com^
+DOMAIN-SUFFIX,slb-p2p.vcloud.ks-live.com
+# 疑似p2p cdn文件
+DOMAIN-SUFFIX,yximgs-webrtc.liveplay.myqcloud.com
+# xxpkg系 疑似快手关联公司
+# ||*pcdn*.xxpkg.com^
+DOMAIN-SUFFIX,p2p-punch.xxpkg.com
+# ||p2p-punch-*.xxpkg.com^
+
+# 斗鱼
+DOMAIN-SUFFIX,p2plog.douyucdn.cn
+DOMAIN-SUFFIX,p2perrorlog.douyucdn.cn
+DOMAIN-SUFFIX,stun.douyucdn.cn
+DOMAIN-SUFFIX,stun1.douyucdn.cn
+DOMAIN-SUFFIX,bjfesdk.douyucdn.cn
+DOMAIN-SUFFIX,dotcounter.douyucdn.cn
+DOMAIN-SUFFIX,sdkapi.douyucdn.cn
+# ||p2pchunk-*.douyucdn.cn^
+# /trk-([0-9\-]+)\.douyucdn\.cn/
+DOMAIN-SUFFIX,p2pchunk-hw.douyucdn.cn
+DOMAIN-SUFFIX,p2pchunk-table.douyucdn.cn
+DOMAIN-SUFFIX,p2pchunk-ws.douyucdn.cn
+# ||p2pable-*.douyucdn.cn^
+# ||dyp2p-*.douyucdn2.cn^
+DOMAIN-SUFFIX,dyp2p-ali.douyucdn.cn
+DOMAIN-SUFFIX,dyp2p-hw.douyucdn.cn
+DOMAIN-SUFFIX,dyp2p-ali.douyucdn2.cn
+DOMAIN-SUFFIX,dyp2p-hw.douyucdn2.cn
+# ||p2plive-*.douyucdn.cn^
+DOMAIN-SUFFIX,p2plive-ali.douyucdn.cn
+DOMAIN-SUFFIX,p2plive-ws.douyucdn.cn
+DOMAIN-SUFFIX,p2pvod-ws.douyucdn.cn
+
+# 虎牙
+DOMAIN-SUFFIX,p2p.huya.com
+
+# bilibili
+# ||*-pcdn-*.biliapi.net^
+# ||stun*.chat.bilibili.com^
+# ||*-p2p-*.chat.bilibili.com^
+DOMAIN-SUFFIX,mcdn.bilivideo.cn
+DOMAIN-SUFFIX,mcdn.bilivideo.com
+DOMAIN-SUFFIX,edge.mountaintoys.cn
+DOMAIN-SUFFIX,pcdn.biliapi.net
+
+# 抖音/字节/西瓜/火山
+DOMAIN-SUFFIX,hypercachenode.com
+# /.*p2p.*(douyin|bytedance|amemv).*\.(com|cn)$/
+DOMAIN-SUFFIX,p2p.douyinvod.com
+DOMAIN-SUFFIX,p2p.bytegecko.com
+DOMAIN-SUFFIX,p2p.bytedance.com
+DOMAIN-SUFFIX,p2p.amemv.com
+DOMAIN-SUFFIX,p2p.snssdk.com
+DOMAIN-SUFFIX,p2p.bytecdn.com
+DOMAIN-SUFFIX,p2p.byteimg.com
+DOMAIN-SUFFIX,p2p.tosv.byted.org
+DOMAIN-SUFFIX,p2p.douyinpic.com
+DOMAIN-SUFFIX,p2p.ixigua.com
+DOMAIN-SUFFIX,p2p.hotsoon.snssdk.com
+DOMAIN-SUFFIX,p2p.pstatp.com
+DOMAIN-SUFFIX,p2p.douyincdn.com
+DOMAIN-SUFFIX,p2p-lf.bytedance.com
+DOMAIN-SUFFIX,p2p-lf.bytegecko.com
+DOMAIN-SUFFIX,p2p-lf.douyinvod.com
+DOMAIN-SUFFIX,p2p-lf.snssdk.com
+DOMAIN-SUFFIX,p2p-lf.amemv.com
+DOMAIN-SUFFIX,p2p-lf.bytecdn.com
+DOMAIN-SUFFIX,p2p-lf.byteimg.com
+DOMAIN-SUFFIX,p2p-lf.tosv.byted.org
+DOMAIN-SUFFIX,p2p-lf.douyinpic.com
+DOMAIN-SUFFIX,p2p-lf.ixigua.com
+DOMAIN-SUFFIX,p2p-lf.hotsoon.snssdk.com
+DOMAIN-SUFFIX,p2p-lf.pstatp.com
+DOMAIN-SUFFIX,p2p-lf.douyincdn.com
+
+
+# 芒果tv
+DOMAIN-SUFFIX,stun.hitv.com
+
+# 优酷Youku
+# /^pis(?:-[^-]+)?-pcdn\.youku\.com$/
+DOMAIN-SUFFIX,pcdn.youku.com
+
+# 56网/搜狐视频
+DOMAIN-SUFFIX,p2p.tracker.tv.sohu.com
+
+# 星域云/网心
+DOMAIN-SUFFIX,conf-darwin.xycdn.com
+# ||seeds*-darwin.xycdn.com^
+DOMAIN-SUFFIX,seeds-open.xycdn.com
+DOMAIN-SUFFIX,ttxyajs.data.kuiniuca.com
+DOMAIN-SUFFIX,sd-gl.xycdn.com
+
+# 金山云
+DOMAIN-SUFFIX,stun.yfp2p.net
+
+# 小米
+DOMAIN-SUFFIX,cdn.exp.xiaomi.com
+
+# 爱奇艺
+DOMAIN-SUFFIX,tpa-hcdn.iqiyi.com
+
+# 喜马拉雅
+
+# TCL
+DOMAIN-SUFFIX,pis-cnc-pcdn.cp31.ott.cibntv.net
+
+# 第三方 PCDN 服务商
+DOMAIN-SUFFIX,ksyungslb.com
+DOMAIN-SUFFIX,gjfzpt.cn
+DOMAIN-SUFFIX,szbdyd.com
+DOMAIN-SUFFIX,bsccdn.net
+DOMAIN-SUFFIX,pkoplink.com
+DOMAIN-SUFFIX,saxysec.com
+DOMAIN-SUFFIX,uhabo.com
+DOMAIN-SUFFIX,xycdn.com
+DOMAIN-SUFFIX,xinqiucc.com
+DOMAIN-SUFFIX,kuiniuca.com
+DOMAIN-SUFFIX,onethingpcs.com
+DOMAIN-SUFFIX,jomodns.cn
+
+# Google
+DOMAIN-SUFFIX,stun.l.google.com
+# ||stun[1-4].l.google.com^
+
+# Facebook/Instagram
+# /.*ad.*(instagram|facebook)\.com$/
+# /.*log.*(instagram|facebook)\.com$/
+# /.*track.*(instagram|facebook)\.com$/
+DOMAIN-SUFFIX,netseer-ipaddr-assoc.xy.fbcdn.net
+DOMAIN-SUFFIX,netseer-ipaddr-assoc.xz.fbcdn.net
+# ||*.netseer-ipaddr-assoc.*.fbcdn.net^
+
+# Twitter
+# /.*ad.*twitter\.com$/
+# /.*track.*twitter\.com$/
+# /.*log.*twitter\.com$/
+
+# === 自定义规则 ===
+# /.*pcdn.*\.(com|net|cn)$/
+# /.*cdn.*p2p.*\.(com|net|cn)$/
+DOMAIN-SUFFIX,pcdn.xmcdn.com
+DOMAIN-SUFFIX,cdn.tools.unlayer.com
