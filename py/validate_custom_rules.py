@@ -64,6 +64,10 @@ def parse_rule_file(path: Path) -> tuple[RuleRecord, ...]:
         if rule_type not in DOMAIN_TYPES | IP_TYPES:
             raise ValueError(f"{path}:{line_number}: unsupported rule type: {rule_type}")
         if rule_type in DOMAIN_TYPES:
+            if len(parts) != 2:
+                raise ValueError(
+                    f"{path}:{line_number}: domain rule must have exactly 2 fields: {rule}"
+                )
             try:
                 ipaddress.ip_address(value)
             except ValueError:
@@ -81,6 +85,12 @@ def parse_rule_file(path: Path) -> tuple[RuleRecord, ...]:
                     f"{path}:{line_number}: invalid domain payload: {value}"
                 )
         else:
+            if len(parts) not in (2, 3) or (
+                len(parts) == 3 and parts[2] != "no-resolve"
+            ):
+                raise ValueError(
+                    f"{path}:{line_number}: invalid IP attribute: {rule}"
+                )
             try:
                 network = ipaddress.ip_network(value, strict=False)
             except ValueError as exc:
@@ -137,6 +147,11 @@ def validate_repository(
     lines = config.read_text(encoding="utf-8-sig").splitlines()
     if not lines or lines[0] != ";Custom_OpenClash_Rules":
         errors.append("cfg/Custom_Clash.ini: invalid first line")
+    for line_number, line in enumerate(lines, 1):
+        if line.startswith(("<<<<<<<", "=======", ">>>>>>>")):
+            errors.append(
+                f"cfg/Custom_Clash.ini:{line_number}: merge conflict marker: {line}"
+            )
 
     defined_groups = {
         line.split("`", 1)[0].split("=", 1)[1]

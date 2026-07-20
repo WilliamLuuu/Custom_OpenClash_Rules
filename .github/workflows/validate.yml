@@ -4,11 +4,14 @@ on:
   push:
     branches:
       - main
-    # Source-list pushes are validated after Auto generate rules publishes the
-    # matching YAML/MRS commit. Pull requests still validate source and derived
-    # files together before merge.
+    # Auto-generated source-list pushes are validated after their generators
+    # publish the matching YAML/MRS commit. Repository-owned custom lists still
+    # trigger this workflow directly.
     paths-ignore:
-      - 'rule/*.list'
+      - 'rule/Custom_Direct.list'
+      - 'rule/Custom_Proxy.list'
+      - 'rule/Steam_CDN.list'
+      - 'rule/Encrypted_DNS.list'
   pull_request:
     branches:
       - main
