@@ -125,6 +125,7 @@ class CliTests(unittest.TestCase):
             result = subprocess.run(
                 [sys.executable, validate_custom_rules.__file__, "--root", str(root)],
                 capture_output=True,
+                encoding="gbk",
                 env=environment,
                 text=True,
             )
