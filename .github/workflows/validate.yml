@@ -75,6 +75,7 @@ jobs:
           actionlint .github/workflows/*.yml
           sh shell/check_cpu_version.sh --self-check
           python -m unittest discover -s py -p 'test_*.py'
+          python py/validate_custom_rules.py
           python py/generate_game_cdn.py --check
           python py/update_encrypted_dns.py --check
           python py/generate_rules.py --check --mihomo mihomo
