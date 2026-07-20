@@ -15,6 +15,26 @@
 | [**Steam_CDN.list**](Steam_CDN.list) | <img src="https://img.shields.io/badge/Mode-DIRECT-green?style=flat-square" alt="DIRECT"> | 🎮 **Steam CDN**：精确匹配 Steam 下载服务器，确保 Steam 下载流量尽量不经由出站策略。 |
 | [**Encrypted_DNS.list**](Encrypted_DNS.list) | <img src="https://img.shields.io/badge/Mode-REJECT-red?style=flat-square" alt="REJECT"> | 🛡️ **加密 DNS**：汇总 HaGeZi、DNSCrypt 与 `geosite:category-doh` 的域名和 IP，用于拦截绕过本地 DNS 的连接。 |
 
+## 🧭 本仓库自定义分流规则
+
+| 规则文件 | 策略 | 维护方式 |
+| :--- | :---: | :--- |
+| `Adobe.list` | REJECT | 本地精确规则 |
+| `Betting-Direct.list` | DIRECT | 本地维护，允许 `DOMAIN-KEYWORD` |
+| `Betting-Proxy.list` | Betting | 本地维护，优先级不得与 DIRECT 重叠 |
+| `Score-Direct.list` | DIRECT | 本地精确规则 |
+| `Score-Proxy.list` | Betting | 本地精确规则 |
+| `Crypto.list` | Crypto | 本地维护 |
+| `Emby-LyreBird.list` | LyreBirdEmby | 本地维护 |
+| `PCDN.list` | REJECT | 外部源更新加本地补充 |
+| `UK-WiFi-Calling.list` | UK-WiFi-Calling | 外部源更新加本地补充 |
+| `VPN-LyreBird.list` | DIRECT | 本地维护 |
+| `VPN-NiceDuck.list` | DIRECT | 本地维护 |
+| `VPN-PeiQianJiChang.list` | DIRECT | 本地维护 |
+| `VPN-Yuyujc.list` | DIRECT | 本地维护 |
+
+这些自定义 `.list` 文件由 Subconverter 直接使用，不是 `py/generate_rules.py` 的输入。
+
 ---
 
 ## 🧩 文件格式说明
