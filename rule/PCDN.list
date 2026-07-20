@@ -171,4 +171,3 @@ DOMAIN-SUFFIX,netseer-ipaddr-assoc.xz.fbcdn.net
 # /.*pcdn.*\.(com|net|cn)$/
 # /.*cdn.*p2p.*\.(com|net|cn)$/
 DOMAIN-SUFFIX,pcdn.xmcdn.com
-DOMAIN-SUFFIX,cdn.tools.unlayer.com

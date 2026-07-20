@@ -86,5 +86,11 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("Traceback", result.stderr)
 
 
+class LiveRepositoryValidationTests(unittest.TestCase):
+    def test_repository_custom_rules_are_valid(self) -> None:
+        root = Path(__file__).resolve().parent.parent
+        self.assertEqual(validate_custom_rules.validate_repository(root), [])
+
+
 if __name__ == "__main__":
     unittest.main()
