@@ -1,0 +1,8 @@
+# NAME: Betting-Proxy
+# AUTHOR: WilliamLuuu
+# REPO: https://github.com/WilliamLuuu/Custom_OpenClash_Rules
+# 博彩代理域名列表2，来自个人收集
+
+# 1xbet
+DOMAIN-SUFFIX,1xbet.com
+DOMAIN-SUFFIX,1xbetjap.com
