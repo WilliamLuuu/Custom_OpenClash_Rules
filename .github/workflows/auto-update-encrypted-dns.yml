@@ -7,17 +7,18 @@ on:
   workflow_dispatch:
 
 permissions:
-  actions: write
   contents: write
-
-concurrency:
-  group: main-writers
 
 jobs:
   update-encrypted-dns:
     if: github.repository == 'Aethersailor/Custom_OpenClash_Rules'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    concurrency:
+      group: main-writers
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+      source_before_sha: ${{ steps.commit.outputs.source_before_sha }}
 
     steps:
       - name: Checkout main branch
@@ -33,7 +34,7 @@ jobs:
 
       - name: Update and validate Encrypted_DNS.list
         run: |
-          python -m unittest discover -s py -p 'test_*.py'
+          python -m unittest discover -s py -p 'test_rule_generation.py'
           python py/update_encrypted_dns.py
           python py/update_encrypted_dns.py --check
 
@@ -49,7 +50,7 @@ jobs:
           git fetch origin main
           if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
             git reset --hard origin/main
-            python -m unittest discover -s py -p 'test_*.py'
+            python -m unittest discover -s py -p 'test_rule_generation.py'
             python py/update_encrypted_dns.py
             python py/update_encrypted_dns.py --check
           fi
@@ -60,6 +61,7 @@ jobs:
             exit 1
           fi
 
+          source_before_sha="$(git rev-parse HEAD)"
           git add -- rule/Encrypted_DNS.list
           if git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
@@ -70,9 +72,14 @@ jobs:
           git commit -m "chore(rule): auto-update Encrypted_DNS.list"
           git push origin HEAD:main
           echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "source_before_sha=$source_before_sha" >> "$GITHUB_OUTPUT"
 
-      - name: Generate derived rule files
-        if: steps.commit.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run auto-generate-rules.yml --ref main
+  generate-derived-rules:
+    needs: update-encrypted-dns
+    if: needs.update-encrypted-dns.outputs.changed == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/auto-generate-rules.yml
+    secrets: inherit
+    with:
+      source_before_sha: ${{ needs.update-encrypted-dns.outputs.source_before_sha }}

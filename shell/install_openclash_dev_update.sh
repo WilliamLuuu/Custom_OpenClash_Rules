@@ -1,34 +1,24 @@
 #!/bin/sh
-# ================================================================
-# Custom_OpenClash_Rules 自动安装脚本
-# 项目地址: https://github.com/Aethersailor/Custom_OpenClash_Rules
-# 功能: 自动安装/更新 OpenClash Dev 版本及全套配置
-# ================================================================
 
-R='\033[1;31m'
-G='\033[1;32m'
-Y='\033[1;33m'
-B='\033[1;34m'
-C='\033[1;36m'
-W='\033[1;37m'
-N='\033[0m'
+# Shared helper bodies are synchronized into install_openclash_dev.sh by
+# py/sync_installer_common.py. Both public scripts remain self-contained.
 
-INFO="${B}[i]${N}"
-WARN="${Y}[!]${N}"
-ERR="${R}[x]${N}"
-OK="${G}[+]${N}"
+R=''
+G=''
+Y=''
+B=''
+C=''
+W=''
+N=''
 
-MODEL_ASSETS_URL="https://github.com/vernesong/mihomo/releases/expanded_assets/LightGBM-Model"
-MODEL_DOWNLOAD_PREFIX="https://github.com/vernesong/mihomo/releases/download/LightGBM-Model"
 OPENCLASH_REPO_URL="https://github.com/vernesong/OpenClash.git"
 PACKAGE_REF="refs/heads/package"
 GIT_REFS_URL="${OPENCLASH_REPO_URL}/info/refs?service=git-upload-pack"
-JSDELIVR_METADATA_PREFIX="https://data.jsdelivr.com/v1/package/gh/vernesong/OpenClash@"
 JSDELIVR_PACKAGE_PREFIX="https://testingcf.jsdelivr.net/gh/vernesong/OpenClash@"
 RAW_PACKAGE_PREFIX="https://raw.githubusercontent.com/vernesong/OpenClash"
 GH_PROXY_PREFIX="https://v6.gh-proxy.org/"
-GITHUB_HOSTS_URL="https://raw.hellogithub.com/hosts"
-PACKAGE_RESOLVE_RETRIES="${PACKAGE_RESOLVE_RETRIES:-3}"
+PACKAGE_MAX_ROUNDS="${PACKAGE_MAX_ROUNDS:-2}"
+PACKAGE_MIN_BYTES="${PACKAGE_MIN_BYTES:-262144}"
 PACKAGE_REF_CONNECT_TIMEOUT="${PACKAGE_REF_CONNECT_TIMEOUT:-8}"
 PACKAGE_REF_MAX_TIME="${PACKAGE_REF_MAX_TIME:-25}"
 
@@ -37,89 +27,204 @@ OPENCLASH_ETC_DIR="${OPENCLASH_ETC_DIR:-/etc/openclash}"
 OPENCLASH_INIT="${OPENCLASH_INIT:-/etc/init.d/openclash}"
 OPENCLASH_LOG="${OPENCLASH_LOG:-/tmp/openclash.log}"
 OPENCLASH_PRESET="${OPENCLASH_PRESET:-/etc/config/openclash-set}"
+OS_RELEASE_FILE="${OS_RELEASE_FILE:-/etc/os-release}"
+OPENWRT_RELEASE_FILE="${OPENWRT_RELEASE_FILE:-/etc/openwrt_release}"
+MODEL_OFFICIAL_PREFIX="https://github.com/vernesong/mihomo/releases/download/LightGBM-Model"
+
+INSTALLER_TITLE="OpenClash Dev 完整更新"
+INSTALLER_SCOPE="插件、内核、Smart / LightGBM"
+INSTALLER_SCOPE_EXTRA="Geo 数据、Chnroute、订阅和用户预设"
+TOTAL_STEPS=7
 
 PKG_MGR=""
 EXT=""
 FIREWALL_TYPE=""
+DISTRO_ID=""
 DEPENDENCIES=""
 TMP_DIR=""
-LOCK_DIR="${LOCK_DIR:-/tmp/install_openclash_dev_update.lock}"
+LOCK_DIR="${LOCK_DIR:-/tmp/install_openclash_dev.lock}"
 FEED_FILE=""
 FEED_BACKUP=""
 FEED_CHANGED=0
-ORIGINAL_GITHUB_MOD=""
-RESTORE_GITHUB_MOD=0
+PRESERVED_PACKAGE_PATH=""
+PACKAGE_EXPECTED_SIZE=""
+PACKAGE_EXPECTED_SHA256=""
+SELECTED_MODEL=""
+SELECTED_MODEL_SIZE=""
+SELECTED_MODEL_URL=""
+SELECTED_MODEL_SHA256=""
+MODEL_METADATA_FILE=""
+INSTALLER_LOG="/tmp/openclash-installer.$$.log"
+CURRENT_STAGE="启动安装器"
+WARNING_COUNT=0
+FEED_MIRROR_LABEL=""
+FEED_RESTORE_RESULT="本次未修改"
+TARGET_VERSION=""
+PACKAGE_SOURCE=""
+PACKAGE_INTEGRITY="文件大小和安装预检通过"
+CORE_TYPE_USED=""
+CORE_RESULT="尚未执行"
+SMART_RESULT="尚未处理"
+MODEL_RESULT="尚未处理"
+MODEL_SOURCE=""
+MODEL_SHA256_VERIFIED=0
+RESOURCE_RESULT="尚未执行"
+PRESET_RESULT="尚未处理"
+SERVICE_RESULT="尚未执行"
 
-RAW_GITHUB_IP=""
-GITHUB_COM_IP=""
-PACKAGE_COMMIT=""
-PACKAGE_TARGET_VERSION=""
+init_terminal() {
+    if [ -t 1 ] && [ "${TERM:-dumb}" != "dumb" ]; then
+        R='\033[1;31m'
+        G='\033[1;32m'
+        Y='\033[1;33m'
+        B='\033[1;34m'
+        C='\033[1;36m'
+        W='\033[1;37m'
+        N='\033[0m'
+    fi
+    if [ -t 1 ]; then
+        if command -v clear >/dev/null 2>&1; then
+            clear 2>/dev/null || printf '\033[2J\033[H'
+        else
+            printf '\033[2J\033[H'
+        fi
+    fi
+}
+
+append_log() {
+    [ -n "$INSTALLER_LOG" ] && [ -f "$INSTALLER_LOG" ] || return 0
+    printf '%s\n' "$1" >>"$INSTALLER_LOG" 2>/dev/null || true
+}
 
 print_line() {
-    printf '%b\n' "${C}================================================================${N}"
+    printf '%b\n' "${C}============================================================${N}"
 }
 
 print_step() {
+    step_number=$1
+    CURRENT_STAGE=$2
     printf '\n'
-    print_line
-    printf '%b\n' "${W}>> $1${N}"
-    print_line
+    printf '%b\n' "${C}[$step_number/$TOTAL_STEPS]${N} ${W}$CURRENT_STAGE${N}"
+    append_log "[$step_number/$TOTAL_STEPS] $CURRENT_STAGE"
+}
+
+ui_field() {
+    printf '  %s：%s\n' "$1" "$2"
+    append_log "$1：$2"
 }
 
 log_info() {
-    printf '%b\n' "${INFO} $1"
+    printf '%b\n' "  ${B}$1${N}"
+    append_log "信息：$1"
 }
 
 log_warn() {
-    printf '%b\n' "${WARN} $1"
+    WARNING_COUNT=$((WARNING_COUNT + 1))
+    printf '%b\n' "  ${Y}[注意]${N} $1"
+    append_log "注意：$1"
 }
 
 log_error() {
-    printf '%b\n' "${ERR} $1" >&2
+    printf '%b\n' "${R}[失败]${N} $1" >&2
+    append_log "失败：$1"
 }
 
 log_ok() {
-    printf '%b\n' "${OK} $1"
+    printf '%b\n' "  ${G}[成功]${N} $1"
+    append_log "成功：$1"
+}
+
+log_skip() {
+    printf '%b\n' "  ${Y}[跳过]${N} $1"
+    append_log "跳过：$1"
+}
+
+run_logged() {
+    if [ -n "$INSTALLER_LOG" ]; then
+        printf '\n>>> %s\n' "$*" >>"$INSTALLER_LOG" 2>/dev/null || true
+        "$@" >>"$INSTALLER_LOG" 2>&1
+    else
+        "$@"
+    fi
+}
+
+show_log_excerpt() {
+    [ -s "$INSTALLER_LOG" ] || return 0
+    command -v tail >/dev/null 2>&1 || return 0
+    printf '\n%s\n' "  最后几条错误信息：" >&2
+    tail -n 8 "$INSTALLER_LOG" 2>/dev/null |
+        while IFS= read -r line; do
+            [ -n "$line" ] && printf '    %s\n' "$line" >&2
+        done
+}
+
+print_failure_summary() {
+    failure_message=$1
+    restore_message=$2
+    printf '\n' >&2
+    print_line >&2
+    printf '%b\n' "${R}更新未完成${N}" >&2
+    print_line >&2
+    printf '  失败阶段：%s\n' "$CURRENT_STAGE" >&2
+    printf '  失败原因：%s\n' "$failure_message" >&2
+    printf '  软件源恢复：%s\n' "$restore_message" >&2
+    show_log_excerpt
+    printf '\n  建议：检查网络后重新运行同一条安装命令。\n' >&2
+    printf '  运行日志：%s\n' "$INSTALLER_LOG" >&2
+    print_line >&2
 }
 
 die() {
-    log_error "$1"
+    failure_message=$1
+    restore_message=$FEED_RESTORE_RESULT
+    if [ "$FEED_CHANGED" -eq 1 ]; then
+        if restore_feed >/dev/null 2>&1; then
+            restore_message=$FEED_RESTORE_RESULT
+        else
+            restore_message="恢复失败，请检查 $FEED_FILE"
+        fi
+    fi
+    append_log "失败：$failure_message"
+    print_failure_summary "$failure_message" "$restore_message"
     exit 1
 }
 
 logo() {
-    command -v clear >/dev/null 2>&1 && clear
-    printf '%b\n' "${C}################################################################${N}"
-    printf '%b\n' "${C}#                                                              #${N}"
-    printf '%b\n' "${C}#              Custom_OpenClash_Rules Auto Installer           #${N}"
-    printf '%b\n' "${C}#     https://github.com/Aethersailor/Custom_OpenClash_Rules   #${N}"
-    printf '%b\n' "${C}#                                                              #${N}"
-    printf '%b\n' "${C}################################################################${N}"
-    printf '%b\n\n' "${W}* OpenClash Dev 在线全自动化安装与更新脚本${N}"
+    init_terminal
+    print_line
+    printf '%b\n' "${W} $INSTALLER_TITLE${N}"
+    print_line
+    printf '  将更新：%s\n' "$INSTALLER_SCOPE"
+    [ -z "${INSTALLER_SCOPE_EXTRA:-}" ] ||
+        printf '          %s\n' "$INSTALLER_SCOPE_EXTRA"
+    printf '%s\n' '  本次运行会临时切换软件源，结束前自动恢复。'
+    printf '%s\n' '  请勿关闭终端。'
 }
 
 restore_feed() {
-    if [ "$FEED_CHANGED" -eq 1 ] && [ -n "$FEED_FILE" ] && [ -f "$FEED_BACKUP" ]; then
-        cp -p "$FEED_BACKUP" "$FEED_FILE" 2>/dev/null || true
-        FEED_CHANGED=0
-    fi
+    [ "$FEED_CHANGED" -eq 1 ] || return 0
+    [ -n "$FEED_FILE" ] && [ -f "$FEED_BACKUP" ] || return 1
+    cp -p "$FEED_BACKUP" "$FEED_FILE" || return 1
+    FEED_CHANGED=0
+    FEED_RESTORE_RESULT="已恢复为运行前状态"
+    return 0
 }
 
 cleanup() {
     status=$?
     trap - EXIT INT TERM HUP
-    restore_feed
-    if [ "$RESTORE_GITHUB_MOD" -eq 1 ] && command -v uci >/dev/null 2>&1; then
-        uci set openclash.config.github_address_mod="${ORIGINAL_GITHUB_MOD:-https://testingcf.jsdelivr.net/}" 2>/dev/null || true
-        uci commit openclash 2>/dev/null || true
-    fi
-    [ -n "$TMP_DIR" ] && rm -rf "$TMP_DIR"
+    restore_feed >/dev/null 2>&1 || true
+    case "$TMP_DIR" in
+        /tmp/openclash-installer.*) rm -rf "$TMP_DIR" ;;
+    esac
     rm -f "$LOCK_DIR/pid" 2>/dev/null || true
     rmdir "$LOCK_DIR" 2>/dev/null || true
     exit "$status"
 }
 
 init_runtime() {
+    : >"$INSTALLER_LOG" 2>/dev/null || INSTALLER_LOG=""
+
     [ "$(id -u 2>/dev/null)" = "0" ] || die "请使用 root 用户运行此脚本。"
 
     if ! mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -127,10 +232,13 @@ init_runtime() {
         if [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null; then
             die "检测到另一个安装任务正在运行（PID $lock_pid）。"
         fi
-        rm -rf "$LOCK_DIR"
+        rm -f "$LOCK_DIR/pid" 2>/dev/null || true
+        rmdir "$LOCK_DIR" 2>/dev/null ||
+            die "运行锁目录无法安全清理：$LOCK_DIR"
         mkdir "$LOCK_DIR" 2>/dev/null || die "无法创建运行锁：$LOCK_DIR"
     fi
     printf '%s\n' "$$" >"$LOCK_DIR/pid"
+
     trap cleanup EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
@@ -140,7 +248,28 @@ init_runtime() {
         die "无法创建临时目录。"
 }
 
+detect_distribution() {
+    if [ -n "${OPENCLASH_DISTRO_OVERRIDE:-}" ]; then
+        release_text=$OPENCLASH_DISTRO_OVERRIDE
+    else
+        release_text=""
+        [ -f "$OS_RELEASE_FILE" ] &&
+            release_text="$release_text $(cat "$OS_RELEASE_FILE" 2>/dev/null)"
+        [ -f "$OPENWRT_RELEASE_FILE" ] &&
+            release_text="$release_text $(cat "$OPENWRT_RELEASE_FILE" 2>/dev/null)"
+    fi
+
+    release_lower=$(printf '%s\n' "$release_text" | tr '[:upper:]' '[:lower:]')
+    case "$release_lower" in
+        *immortalwrt*) DISTRO_ID="immortalwrt" ;;
+        *openwrt*) DISTRO_ID="openwrt" ;;
+        *) return 1 ;;
+    esac
+}
+
 detect_environment() {
+    detect_distribution || die "无法识别 OpenWrt 或 ImmortalWrt 发行版。"
+
     if command -v opkg >/dev/null 2>&1; then
         PKG_MGR="opkg"
         EXT="ipk"
@@ -151,37 +280,107 @@ detect_environment() {
         die "未检测到支持的包管理器（opkg/apk）。"
     fi
 
+    base_dependencies="bash dnsmasq-full curl ca-bundle ip-full ruby ruby-yaml kmod-tun unzip kmod-inet-diag luci-compat luci luci-base"
     if command -v fw4 >/dev/null 2>&1 || command -v nft >/dev/null 2>&1; then
         FIREWALL_TYPE="nftables"
-        DEPENDENCIES="bash dnsmasq-full curl ca-bundle ip-full ruby ruby-yaml kmod-tun kmod-inet-diag unzip kmod-nft-tproxy luci-compat luci luci-base coreutils-sha256sum"
+        DEPENDENCIES="$base_dependencies kmod-nft-tproxy"
     elif command -v fw3 >/dev/null 2>&1 || command -v iptables >/dev/null 2>&1; then
         FIREWALL_TYPE="iptables"
-        DEPENDENCIES="bash iptables dnsmasq-full curl ca-bundle ipset ip-full iptables-mod-tproxy iptables-mod-extra ruby ruby-yaml kmod-tun kmod-inet-diag unzip luci-compat luci luci-base coreutils-sha256sum"
+        DEPENDENCIES="$base_dependencies iptables ipset iptables-mod-tproxy iptables-mod-extra"
     else
         die "未检测到支持的防火墙架构（fw4/nftables 或 fw3/iptables）。"
     fi
 
-    log_ok "包管理器：$PKG_MGR"
-    log_ok "防火墙：$FIREWALL_TYPE"
+    case "$DISTRO_ID" in
+        immortalwrt) distro_label="ImmortalWrt" ;;
+        openwrt) distro_label="OpenWrt" ;;
+    esac
+    case "$EXT" in
+        ipk) package_label="IPK" ;;
+        apk) package_label="APK" ;;
+    esac
+    ui_field "发行版" "$distro_label"
+    ui_field "包管理器" "$PKG_MGR"
+    ui_field "防火墙" "$FIREWALL_TYPE"
+    ui_field "安装包格式" "$package_label"
+    log_ok "当前设备环境受支持。"
 }
 
-normalize_version() {
-    printf '%s\n' "$1" |
-        sed -n 's/^\([0-9][0-9.]*[0-9]\)\(-r[0-9][0-9]*\)\{0,1\}$/\1/p'
-}
-
-get_installed_version() {
+select_feed_file() {
+    [ -n "$FEED_FILE" ] && return 0
     if [ "$PKG_MGR" = "opkg" ]; then
-        raw_version=$(opkg status luci-app-openclash 2>/dev/null |
-            awk -F ': ' '/^Version:/{print $2; exit}'
-        )
+        FEED_FILE="/etc/opkg/distfeeds.conf"
     else
-        raw_version=$(apk list -I luci-app-openclash 2>/dev/null |
-            sed -n 's/^luci-app-openclash-\([0-9][0-9.]*\).*/\1/p' |
-            head -n 1
-        )
+        FEED_FILE="/etc/apk/repositories.d/distfeeds.list"
     fi
-    normalize_version "$raw_version"
+}
+
+rewrite_feed_to_mirror() {
+    source_file=$1
+    target_file=$2
+
+    case "$DISTRO_ID" in
+        immortalwrt) mirror_root='https://mirrors.cernet.edu.cn/immortalwrt' ;;
+        openwrt) mirror_root='https://cernet.mirrors.ustc.edu.cn/openwrt' ;;
+        *)
+            return 1
+            ;;
+    esac
+
+    awk -v mirror_root="$mirror_root" '
+        /^[[:space:]]*($|#)/ {
+            print
+            next
+        }
+        {
+            url_start = match($0, /https?:\/\//)
+            if (!url_start) next
+
+            url = substr($0, url_start)
+            path_start = index(url, "/releases/")
+            snapshot_start = index(url, "/snapshots/")
+            if (!path_start || (snapshot_start && snapshot_start < path_start)) {
+                path_start = snapshot_start
+            }
+            if (!path_start) next
+
+            print substr($0, 1, url_start - 1) mirror_root substr(url, path_start)
+            rewritten++
+        }
+        END {
+            if (!rewritten) exit 1
+        }
+    ' "$source_file" >"$target_file"
+}
+
+prepare_temporary_feed() {
+    select_feed_file
+    [ -f "$FEED_FILE" ] || return 1
+
+    FEED_BACKUP="$TMP_DIR/distfeeds.original"
+    feed_candidate="$TMP_DIR/distfeeds.mirror"
+    cp -p "$FEED_FILE" "$FEED_BACKUP" || return 1
+    rewrite_feed_to_mirror "$FEED_BACKUP" "$feed_candidate" || return 1
+
+    case "$DISTRO_ID" in
+        immortalwrt) FEED_MIRROR_LABEL="CERNET ImmortalWrt 镜像" ;;
+        openwrt) FEED_MIRROR_LABEL="CERNET OpenWrt 镜像" ;;
+    esac
+
+    if cmp -s "$FEED_BACKUP" "$feed_candidate"; then
+        FEED_RESTORE_RESULT="原软件源无需修改"
+        ui_field "软件源" "当前已使用 $FEED_MIRROR_LABEL"
+        return 0
+    fi
+
+    FEED_CHANGED=1
+    FEED_RESTORE_RESULT="等待阶段结束时恢复"
+    cp "$feed_candidate" "$FEED_FILE" || {
+        restore_feed >/dev/null 2>&1 || true
+        return 1
+    }
+    ui_field "临时镜像" "$FEED_MIRROR_LABEL"
+    log_info "原软件源已备份，将在本阶段结束前恢复。"
 }
 
 package_update() {
@@ -205,137 +404,168 @@ package_install_dependencies() {
     fi
 }
 
-set_feed_file() {
-    if [ "$PKG_MGR" = "opkg" ]; then
-        FEED_FILE="/etc/opkg/distfeeds.conf"
-    else
-        FEED_FILE="/etc/apk/repositories.d/distfeeds.list"
-    fi
-}
-
-enable_temporary_nju_mirror() {
-    set_feed_file
-    [ -f "$FEED_FILE" ] || return 1
-
-    FEED_BACKUP="$TMP_DIR/distfeeds.original"
-    feed_candidate="$TMP_DIR/distfeeds.nju"
-    cp -p "$FEED_FILE" "$FEED_BACKUP" || return 1
-    sed \
-        -e 's,https://downloads\.immortalwrt\.org,https://mirror.nju.edu.cn/immortalwrt,g' \
-        -e 's,https://mirrors\.vsean\.net/openwrt,https://mirror.nju.edu.cn/immortalwrt,g' \
-        "$FEED_BACKUP" >"$feed_candidate" || return 1
-    cmp -s "$FEED_BACKUP" "$feed_candidate" && return 1
-    FEED_CHANGED=1
-    cp "$feed_candidate" "$FEED_FILE" || {
-        restore_feed
+install_dependencies() {
+    prepare_temporary_feed || {
+        restore_feed >/dev/null 2>&1 || true
         return 1
     }
-}
 
-install_dependencies() {
-    log_info "更新软件源并安装依赖..."
-    if package_update && package_install_dependencies; then
-        log_ok "依赖安装完成。"
-        return 0
+    log_info "正在更新软件索引并检查 OpenClash 运行依赖……"
+    if ! run_logged package_update ||
+        ! run_logged package_install_dependencies; then
+        restore_feed >/dev/null 2>&1 || true
+        return 1
     fi
 
-    log_warn "默认软件源安装失败，临时切换至南京大学镜像重试。"
-    enable_temporary_nju_mirror || die "无法准备临时镜像配置。"
-
-    if ! package_update || ! package_install_dependencies; then
-        die "依赖安装失败，请检查软件源和系统版本。"
-    fi
-
-    restore_feed
-    log_ok "依赖安装完成，系统软件源已恢复。"
+    restore_feed || return 1
+    set -f
+    # Intentional split: dependency names are stored as a whitespace list.
+    # shellcheck disable=SC2086
+    set -- $DEPENDENCIES
+    set +f
+    dependency_count=$#
+    ui_field "软件索引" "更新完成"
+    ui_field "运行依赖" "$dependency_count 项依赖检查并安装完成"
+    ui_field "原软件源" "$FEED_RESTORE_RESULT"
+    log_ok "OpenClash 运行环境已准备完成。"
 }
 
 check_required_commands() {
     missing=""
-    for cmd in awk sed grep curl sha256sum wc df mktemp uci ruby; do
+    for cmd in awk sed grep curl wc df mktemp uci cp cmp tr; do
         command -v "$cmd" >/dev/null 2>&1 || missing="$missing $cmd"
     done
     [ -z "$missing" ] || die "缺少必要命令：$missing"
 }
 
-get_github_hosts() {
-    hosts_file="$TMP_DIR/github_hosts.txt"
-    log_info "获取 GitHub Hosts 信息..."
-
-    if ! curl -fsSL --retry 2 --connect-timeout 10 --max-time 30 \
-        -o "$hosts_file" "$GITHUB_HOSTS_URL"; then
-        log_warn "GitHub Hosts 获取失败，将使用系统 DNS 和反代。"
-        return 0
-    fi
-
-    RAW_GITHUB_IP=$(awk '$2=="raw.githubusercontent.com"{print $1; exit}' "$hosts_file")
-    GITHUB_COM_IP=$(awk '$2=="github.com"{print $1; exit}' "$hosts_file")
-
-    [ -n "$RAW_GITHUB_IP" ] && log_ok "raw.githubusercontent.com：$RAW_GITHUB_IP"
-    [ -n "$GITHUB_COM_IP" ] && log_ok "github.com：$GITHUB_COM_IP"
-}
-
 curl_download() {
     output=$1
     url=$2
-    resolve_host=${3:-}
-    resolve_ip=${4:-}
-
     rm -f "$output"
-    if [ -n "$resolve_host" ] && [ -n "$resolve_ip" ]; then
-        curl -fsSL --retry 3 --retry-delay 2 --connect-timeout 30 --max-time 1200 \
-            --resolve "$resolve_host:443:$resolve_ip" -o "$output" "$url"
+    run_logged curl -fsSL --retry 2 --retry-delay 1 \
+        --connect-timeout 10 --max-time 180 \
+        -o "$output" "$url" &&
+        [ -s "$output" ]
+}
+
+file_size_bytes() {
+    wc -c <"$1" 2>/dev/null | tr -d ' '
+}
+
+file_sha256() {
+    file=$1
+    digest=""
+    if command -v sha256sum >/dev/null 2>&1; then
+        digest=$(sha256sum "$file" 2>/dev/null | awk '{print tolower($1)}')
+    elif command -v openssl >/dev/null 2>&1; then
+        digest=$(openssl dgst -sha256 "$file" 2>/dev/null |
+            awk '{print tolower($NF)}')
     else
-        curl -fsSL --retry 3 --retry-delay 2 --connect-timeout 30 --max-time 1200 \
-            -o "$output" "$url"
+        return 1
     fi
+
+    case "$digest" in
+        *[!0-9a-f]* | '') return 1 ;;
+    esac
+    [ "${#digest}" -eq 64 ] || return 1
+    printf '%s\n' "$digest"
+}
+
+base64_sha256_to_hex() {
+    command -v base64 >/dev/null 2>&1 || return 1
+    command -v od >/dev/null 2>&1 || return 1
+    digest=$(printf '%s' "$1" | base64 -d 2>/dev/null |
+        od -An -tx1 2>/dev/null | tr -d ' \n')
+    case "$digest" in
+        *[!0-9a-f]* | '') return 1 ;;
+    esac
+    [ "${#digest}" -eq 64 ] || return 1
+    printf '%s\n' "$digest"
+}
+
+parse_jsdelivr_package_metadata() {
+    metadata_file=$1
+    file_name=$2
+    tr -d '\r\n\t ' <"$metadata_file" 2>/dev/null |
+        awk -v target="/dev/$file_name" '
+            {
+                key="\"name\":\"" target "\""
+                start=index($0, key)
+                if (!start) exit
+                tail=substr($0, start)
+                remainder=substr(tail, length(key) + 1)
+                next_name=index(remainder, "\"name\":\"")
+                if (next_name) tail=substr(tail, 1, length(key) + next_name - 1)
+
+                hash_marker="\"hash\":\""
+                hash_start=index(tail, hash_marker)
+                if (!hash_start) exit
+                hash_tail=substr(tail, hash_start + length(hash_marker))
+                hash_end=index(hash_tail, "\"")
+                if (!hash_end) exit
+                hash=substr(hash_tail, 1, hash_end - 1)
+
+                size_marker="\"size\":"
+                size_start=index(tail, size_marker)
+                if (!size_start) exit
+                size=substr(tail, size_start + length(size_marker))
+                sub(/[^0-9].*/, "", size)
+                if (size ~ /^[0-9]+$/ && size > 0) print hash, size
+            }
+        '
+}
+
+fetch_package_integrity_metadata() {
+    commit=$1
+    file_name=$2
+    PACKAGE_EXPECTED_SIZE=""
+    PACKAGE_EXPECTED_SHA256=""
+    PACKAGE_INTEGRITY="文件大小和安装预检通过"
+    metadata_file="$TMP_DIR/package-metadata.json"
+    metadata_url="https://data.jsdelivr.com/v1/package/gh/vernesong/OpenClash@${commit}/flat"
+
+    rm -f "$metadata_file"
+    if ! curl -fsSL --connect-timeout "${INTEGRITY_CONNECT_TIMEOUT:-3}" \
+        --max-time "${INTEGRITY_MAX_TIME:-8}" \
+        -H 'Accept: application/json' \
+        -o "$metadata_file" "$metadata_url" 2>/dev/null; then
+        append_log "安装包官方元数据不可用，使用文件大小和安装预检。"
+        return 0
+    fi
+
+    metadata=$(parse_jsdelivr_package_metadata "$metadata_file" "$file_name")
+    encoded_hash=${metadata%% *}
+    expected_size=${metadata#* }
+    if [ -z "$metadata" ] || [ "$expected_size" = "$metadata" ]; then
+        append_log "安装包官方元数据不可解析，使用文件大小和安装预检。"
+        return 0
+    fi
+
+    PACKAGE_EXPECTED_SIZE=$expected_size
+    if PACKAGE_EXPECTED_SHA256=$(base64_sha256_to_hex "$encoded_hash"); then
+        PACKAGE_INTEGRITY="官方文件大小、SHA-256 和安装预检均通过"
+    else
+        PACKAGE_EXPECTED_SHA256=""
+        PACKAGE_INTEGRITY="官方文件大小和安装预检通过"
+    fi
+    return 0
 }
 
 fetch_package_refs_route() {
     route=$1
     output=$2
-    rm -f "$output"
-
     case "$route" in
-        direct)
-            url=$GIT_REFS_URL
-            resolve_args=""
-            ;;
-        hosts)
-            [ -n "$GITHUB_COM_IP" ] || return 1
-            url=$GIT_REFS_URL
-            resolve_args="github.com:443:$GITHUB_COM_IP"
-            ;;
-        proxy)
-            url="${GH_PROXY_PREFIX}${GIT_REFS_URL}"
-            resolve_args=""
-            ;;
-        *)
-            return 1
-            ;;
+        direct) url=$GIT_REFS_URL ;;
+        proxy) url="${GH_PROXY_PREFIX}${GIT_REFS_URL}" ;;
+        *) return 1 ;;
     esac
 
-    if [ -n "$resolve_args" ]; then
-        curl -fsSL --connect-timeout "$PACKAGE_REF_CONNECT_TIMEOUT" \
-            --max-time "$PACKAGE_REF_MAX_TIME" \
-            -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
-            --resolve "$resolve_args" -o "$output" "$url" 2>/dev/null || return 1
-    else
-        curl -fsSL --connect-timeout "$PACKAGE_REF_CONNECT_TIMEOUT" \
-            --max-time "$PACKAGE_REF_MAX_TIME" \
-            -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
-            -o "$output" "$url" 2>/dev/null || return 1
-    fi
+    rm -f "$output"
+    curl -fsSL --connect-timeout "$PACKAGE_REF_CONNECT_TIMEOUT" \
+        --max-time "$PACKAGE_REF_MAX_TIME" \
+        -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' \
+        -o "$output" "$url" 2>/dev/null || return 1
     grep -aq '# service=git-upload-pack' "$output"
-}
-
-package_ref_route_label() {
-    case "$1" in
-        direct) printf '%s\n' 'GitHub Smart HTTP 直连' ;;
-        hosts) printf '%s\n' "GitHub Hosts IP（$GITHUB_COM_IP）" ;;
-        proxy) printf '%s\n' 'GitHub Smart HTTP 反代' ;;
-        *) printf '%s\n' "$1" ;;
-    esac
 }
 
 fetch_package_branch_sha() {
@@ -353,20 +583,15 @@ fetch_package_branch_sha() {
     fi
 
     if [ -z "$selected_route" ]; then
-        for route in direct hosts proxy; do
-            [ "$route" != "hosts" ] || [ -n "$GITHUB_COM_IP" ] || continue
-            label=$(package_ref_route_label "$route")
-            log_info "探测官方 package 分支：$label" >&2
+        for route in direct proxy; do
+            append_log "探测官方 package 分支：$route"
             if fetch_package_refs_route "$route" "$refs_file"; then
                 selected_route=$route
                 printf '%s\n' "$route" >"$route_file"
-                log_ok "官方提交探测路径：$label" >&2
                 break
             fi
-            log_warn "$label 不可用，切换下一条路径。" >&2
         done
     fi
-
     [ -n "$selected_route" ] || return 1
 
     sha=$(awk -v ref="$PACKAGE_REF" '
@@ -399,228 +624,212 @@ download_commit_file() {
 
     curl_download "$output" "$jsdelivr_url" ||
         curl_download "$output" "$proxy_url" ||
-        curl_download "$output" "$raw_url" "raw.githubusercontent.com" "$RAW_GITHUB_IP"
-}
-
-fetch_package_metadata() {
-    commit=$1
-    output=$2
-    curl_download "$output" "${JSDELIVR_METADATA_PREFIX}${commit}/flat"
-}
-
-parse_package_metadata() {
-    json_file=$1
-    suffix=".$EXT"
-
-    awk -v suffix="$suffix" '
-        /"name":/ {
-            name=$0
-            sub(/^.*"name":[[:space:]]*"/, "", name)
-            sub(/".*$/, "", name)
-            hash=""
-            size=""
-            selected=(index(name, "/dev/luci-app-openclash") == 1 &&
-                substr(name, length(name) - length(suffix) + 1) == suffix)
-        }
-        selected && /"hash":/ {
-            hash=$0
-            sub(/^.*"hash":[[:space:]]*"/, "", hash)
-            sub(/".*$/, "", hash)
-        }
-        selected && /"size":/ {
-            size=$0
-            sub(/^.*"size":[[:space:]]*/, "", size)
-            sub(/[^0-9].*$/, "", size)
-            if (name != "" && hash != "" && size != "") {
-                sub(/^\/dev\//, "", name)
-                print name "|" hash "|" size
-                exit
-            }
-        }
-    ' "$json_file"
+        curl_download "$output" "$raw_url"
 }
 
 parse_package_version() {
-    sed -n '1s/^v\([0-9][0-9.]*[0-9]\)\r*$/\1/p' "$1"
+    sed -n \
+        '1s/^v\([0-9][0-9]*\(\.[0-9][0-9]*\)\{1,\}\)\r*$/\1/p' \
+        "$1"
 }
 
-resolve_package_metadata() {
-    commit=$1
-    metadata_file="$TMP_DIR/package-metadata.json"
-    version_file="$TMP_DIR/package-version"
-
-    if fetch_package_metadata "$commit" "$metadata_file"; then
-        metadata=$(parse_package_metadata "$metadata_file")
-        if [ -n "$metadata" ]; then
-            printf '%s\n' "$metadata"
-            return 0
-        fi
-    fi
-
-    download_commit_file "$commit" version "$version_file" || return 1
-    version=$(parse_package_version "$version_file")
-    [ -n "$version" ] || return 1
+package_file_name() {
+    version=$1
     case "$EXT" in
-        apk) file_name="luci-app-openclash-${version}.apk" ;;
-        ipk) file_name="luci-app-openclash_${version}_all.ipk" ;;
+        ipk) printf 'luci-app-openclash_%s_all.ipk\n' "$version" ;;
+        apk) printf 'luci-app-openclash-%s.apk\n' "$version" ;;
         *) return 1 ;;
     esac
-    printf '%s||\n' "$file_name"
 }
 
-verify_file_size() {
-    file=$1
-    expected=$2
-    actual=$(wc -c <"$file" 2>/dev/null | tr -d ' ')
-    [ -n "$actual" ] && [ "$actual" = "$expected" ]
-}
-
-verify_sha256_base64() {
-    file=$1
-    expected_base64=$2
-    expected_hex=$(ruby -e 'print ARGV[0].unpack1("m0").unpack1("H*")' \
-        "$expected_base64" 2>/dev/null) || return 1
-    actual_hex=$(sha256sum "$file" | awk '{print $1}')
-    [ "${#expected_hex}" -eq 64 ] && [ "$actual_hex" = "$expected_hex" ]
+apk_supports_allow_downgrade() {
+    apk add --help 2>&1 | grep -q -- '--allow-downgrade'
 }
 
 verify_package_file() {
     file=$1
-    expected_size=$2
-    expected_hash=$3
-
     [ -s "$file" ] || return 1
-    [ -z "$expected_size" ] || verify_file_size "$file" "$expected_size" || return 1
-    [ -z "$expected_hash" ] || verify_sha256_base64 "$file" "$expected_hash" || return 1
+    actual_size=$(file_size_bytes "$file")
+    if [ -n "${PACKAGE_EXPECTED_SIZE:-}" ]; then
+        if [ "$actual_size" != "$PACKAGE_EXPECTED_SIZE" ]; then
+            log_warn "安装包大小与固定提交元数据不一致。"
+            return 1
+        fi
+    elif [ -z "$actual_size" ] || [ "$actual_size" -lt "$PACKAGE_MIN_BYTES" ]; then
+        return 1
+    fi
+
+    if [ -n "${PACKAGE_EXPECTED_SHA256:-}" ]; then
+        if actual_sha256=$(file_sha256 "$file"); then
+            if [ "$actual_sha256" != "$PACKAGE_EXPECTED_SHA256" ]; then
+                log_warn "安装包 SHA-256 与固定提交元数据不一致。"
+                return 1
+            fi
+        else
+            log_info "设备缺少可用 SHA-256 工具，继续执行包管理器 dry-run 校验。"
+            PACKAGE_INTEGRITY="官方文件大小和安装预检通过；设备未提供 SHA-256 工具"
+        fi
+    fi
 
     if [ "$PKG_MGR" = "opkg" ]; then
         opkg --noaction install "$file" >/dev/null 2>&1
+    elif apk_supports_allow_downgrade; then
+        apk add -s --force-reinstall --force-overwrite --clean-protected \
+            --allow-untrusted --allow-downgrade "$file" >/dev/null 2>&1
     else
-        apk add -s -q --force-overwrite --clean-protected --allow-untrusted \
-            "$file" >/dev/null 2>&1
+        apk add -s --force-reinstall --force-overwrite --clean-protected \
+            --allow-untrusted "$file" >/dev/null 2>&1
     fi
 }
 
 download_openclash_package() {
     commit=$1
     file_name=$2
-    expected_size=$3
-    expected_hash=$4
-    output=$5
-
+    output=$3
     raw_url="${RAW_PACKAGE_PREFIX}/${commit}/dev/${file_name}"
     jsdelivr_url="${JSDELIVR_PACKAGE_PREFIX}${commit}/dev/${file_name}"
     proxy_url="${GH_PROXY_PREFIX}${raw_url}"
 
-    log_info "下载顺序：jsDelivr → 反代 → GitHub Raw（均锁定提交 $commit）"
-
-    log_info "尝试从 jsDelivr 下载..."
-    if curl_download "$output" "$jsdelivr_url" &&
-        verify_package_file "$output" "$expected_size" "$expected_hash"; then
-        log_ok "jsDelivr 下载和校验成功。"
-        return 0
-    fi
-    log_warn "jsDelivr 下载或校验失败。"
-
-    log_info "尝试从反代下载..."
-    if curl_download "$output" "$proxy_url" &&
-        verify_package_file "$output" "$expected_size" "$expected_hash"; then
-        log_ok "反代下载和校验成功。"
-        return 0
-    fi
-
-    log_warn "反代下载或校验失败。"
-
-    log_info "尝试从 GitHub Raw 下载..."
-    if curl_download "$output" "$raw_url" "raw.githubusercontent.com" "$RAW_GITHUB_IP" &&
-        verify_package_file "$output" "$expected_size" "$expected_hash"; then
-        log_ok "GitHub Raw 下载和校验成功。"
-        return 0
-    fi
-    log_warn "GitHub Raw 下载或校验失败。"
-
+    fetch_package_integrity_metadata "$commit" "$file_name"
+    attempt=1
+    for source_name in jsdelivr proxy raw; do
+        case "$source_name" in
+            jsdelivr)
+                source=$jsdelivr_url
+                source_label="jsDelivr"
+                ;;
+            proxy)
+                source=$proxy_url
+                source_label="v6.gh-proxy"
+                ;;
+            raw)
+                source=$raw_url
+                source_label="GitHub Raw"
+                ;;
+        esac
+        log_info "正在通过 $source_label 获取安装包……"
+        append_log "下载地址：$source"
+        if curl_download "$output" "$source" &&
+            verify_package_file "$output"; then
+            PACKAGE_SOURCE=$source_label
+            return 0
+        fi
+        if [ "$attempt" -lt 3 ]; then
+            log_warn "$source_label 未获得有效安装包，正在自动尝试备用来源。"
+        else
+            log_warn "$source_label 未获得有效安装包。"
+        fi
+        attempt=$((attempt + 1))
+    done
     rm -f "$output"
     return 1
 }
 
-prepare_latest_package() {
-    output=$1
-    attempt=1
+normalize_version() {
+    printf '%s\n' "$1" |
+        sed -n \
+            's/^\([0-9][0-9]*\(\.[0-9][0-9]*\)\{1,\}\)\(-r[0-9][0-9]*\)\{0,1\}$/\1/p'
+}
 
-    while [ "$attempt" -le "$PACKAGE_RESOLVE_RETRIES" ]; do
-        before=$(fetch_package_branch_sha) || return 1
-        log_info "官方 package 分支提交：$before"
-
-        metadata=$(resolve_package_metadata "$before") || return 1
-        file_name=${metadata%%|*}
-        rest=${metadata#*|}
-        expected_hash=${rest%%|*}
-        expected_size=${rest#*|}
-        target_version=$(extract_version_from_filename "$file_name")
-        [ -n "$target_version" ] || return 1
-
-        if [ -z "$expected_hash" ] || [ -z "$expected_size" ]; then
-            log_warn "提交已锁定，但校验元数据不可用，将使用官方提交直链和包管理器结构校验。"
-        fi
-
-        download_openclash_package "$before" "$file_name" \
-            "$expected_size" "$expected_hash" "$output" || return 1
-
-        after=$(fetch_package_branch_sha) || return 1
-        if [ "$before" = "$after" ]; then
-            PACKAGE_COMMIT=$before
-            PACKAGE_TARGET_VERSION=$target_version
-            return 0
-        fi
-
-        log_warn "下载期间官方 package 分支已从 $before 更新为 $after，重新获取最新版。"
-        rm -f "$output"
-        attempt=$((attempt + 1))
-    done
-
-    return 1
+get_installed_version() {
+    if [ "$PKG_MGR" = "opkg" ]; then
+        raw_version=$(opkg status luci-app-openclash 2>/dev/null |
+            awk -F ': ' '/^Version:/{print $2; exit}')
+    else
+        raw_version=$(apk list -I luci-app-openclash 2>/dev/null |
+            sed -n \
+                's/^luci-app-openclash-\([0-9][0-9]*\(\.[0-9][0-9]*\)\{1,\}\)\(-r[0-9][0-9]*\)\{0,1\}[[:space:]].*$/\1/p' |
+            head -n 1)
+    fi
+    normalize_version "$raw_version"
 }
 
 install_openclash_package() {
     package_file=$1
-
     if [ "$PKG_MGR" = "opkg" ]; then
         opkg install --force-reinstall "$package_file"
+    elif apk_supports_allow_downgrade; then
+        apk add --force-reinstall --force-overwrite --clean-protected \
+            --allow-untrusted --allow-downgrade "$package_file"
     else
-        apk add -q --force-overwrite --clean-protected --allow-untrusted "$package_file"
+        apk add --force-reinstall --force-overwrite --clean-protected \
+            --allow-untrusted "$package_file"
+    fi
+}
+
+preserve_failed_package() {
+    package_file=$1
+    [ -s "$package_file" ] || return 1
+    package_base=$(basename "$package_file")
+    PRESERVED_PACKAGE_PATH="/tmp/${package_base}.failed.$$"
+    cp -p "$package_file" "$PRESERVED_PACKAGE_PATH" || return 1
+
+    log_error "安装包已保留：$PRESERVED_PACKAGE_PATH"
+    if [ "$PKG_MGR" = "opkg" ]; then
+        log_error "可手工执行：opkg install --force-reinstall '$PRESERVED_PACKAGE_PATH'"
+    elif apk_supports_allow_downgrade; then
+        log_error "可手工执行：apk add --force-reinstall --force-overwrite --clean-protected --allow-untrusted --allow-downgrade '$PRESERVED_PACKAGE_PATH'"
+    else
+        log_error "可手工执行：apk add --force-reinstall --force-overwrite --clean-protected --allow-untrusted '$PRESERVED_PACKAGE_PATH'"
     fi
 }
 
 install_latest_openclash_package() {
-    package_file=$1
-    install_round=1
+    round=1
+    while [ "$round" -le "$PACKAGE_MAX_ROUNDS" ]; do
+        commit=$(fetch_package_branch_sha) || return 1
+        case "$commit" in
+            '' | *[!0-9a-f]*) return 1 ;;
+        esac
+        [ "${#commit}" -eq 40 ] || return 1
+        short_commit=$(printf '%.8s' "$commit")
+        ui_field "官方分支" "package"
+        ui_field "固定提交" "$short_commit（保证本次下载内容一致）"
 
-    while [ "$install_round" -le "$PACKAGE_RESOLVE_RETRIES" ]; do
-        prepare_latest_package "$package_file" || return 1
-        target_version=$PACKAGE_TARGET_VERSION
-        install_openclash_package "$package_file" || return 1
+        version_file="$TMP_DIR/version.$round"
+        download_commit_file "$commit" version "$version_file" || return 1
+        target_version=$(parse_package_version "$version_file")
+        [ -n "$target_version" ] || return 1
+        TARGET_VERSION=$target_version
+        file_name=$(package_file_name "$target_version") || return 1
+        package_file="$TMP_DIR/$file_name"
+        ui_field "目标版本" "$target_version"
+        ui_field "安装包" "$file_name"
 
-        installed=$(get_installed_version)
-        [ "$installed" = "$target_version" ] || return 1
+        download_openclash_package "$commit" "$file_name" "$package_file" ||
+            return 1
+        ui_field "下载来源" "$PACKAGE_SOURCE"
+        ui_field "完整性检查" "$PACKAGE_INTEGRITY"
+        ui_field "安装方式" "覆盖安装，包括相同版本"
+        if ! run_logged install_openclash_package "$package_file"; then
+            preserve_failed_package "$package_file" || true
+            return 1
+        fi
 
-        final_commit=$(fetch_package_branch_sha) || return 1
-        if [ "$final_commit" = "$PACKAGE_COMMIT" ]; then
-            log_ok "OpenClash Dev v$installed 安装并验证完成（提交 $PACKAGE_COMMIT）。"
+        installed_version=$(get_installed_version)
+        if [ "$installed_version" != "$target_version" ]; then
+            log_error "安装后版本不一致：目标 $target_version，实际 ${installed_version:-未知}。"
+            preserve_failed_package "$package_file" || true
+            return 1
+        fi
+
+        current_commit=$(fetch_package_branch_sha 2>/dev/null || true)
+        if [ -z "$current_commit" ] || [ "$current_commit" = "$commit" ]; then
+            log_ok "OpenClash $target_version 已安装并完成版本确认。"
             return 0
         fi
 
-        log_warn "安装期间官方 package 分支已从 $PACKAGE_COMMIT 更新为 $final_commit，继续安装最新版。"
-        install_round=$((install_round + 1))
+        if [ "$round" -lt "$PACKAGE_MAX_ROUNDS" ]; then
+            log_warn "package 分支安装期间已移动到 $current_commit，最多再执行一轮。"
+            round=$((round + 1))
+            continue
+        fi
+
+        log_warn "package 分支再次移动；当前安装仍是提交 $commit 的完整自洽版本。"
+        log_ok "OpenClash $target_version 已安装并完成版本确认。"
+        return 0
     done
-
     return 1
-}
-
-extract_version_from_filename() {
-    printf '%s\n' "$1" |
-        sed -n \
-            -e 's/^luci-app-openclash-\([0-9][0-9.]*[0-9]\)\.apk$/\1/p' \
-            -e 's/^luci-app-openclash_\([0-9][0-9.]*[0-9]\)_all\.ipk$/\1/p'
 }
 
 has_cpu_flag() {
@@ -646,7 +855,6 @@ detect_loongarch_abi() {
     kernel_ver=$(uname -r | cut -d. -f1,2)
     major=${kernel_ver%%.*}
     minor=${kernel_ver#*.}
-
     if [ "$major" -gt 5 ] || { [ "$major" -eq 5 ] && [ "$minor" -ge 19 ]; }; then
         printf '%s\n' "abi2"
     else
@@ -656,11 +864,9 @@ detect_loongarch_abi() {
 
 detect_core_arch() {
     arch=${CPU_ARCH_OVERRIDE:-$(uname -m)}
-
     case "$arch" in
         x86_64)
             CPU_FLAGS=${CPU_FLAGS_OVERRIDE:-$(grep -m1 -E '^flags[[:space:]]*:' /proc/cpuinfo 2>/dev/null | cut -d: -f2)}
-
             if has_all_cpu_flags cx16 lahf_lm popcnt pni sse4_1 sse4_2 ssse3 &&
                 has_all_cpu_flags avx avx2 bmi1 bmi2 f16c fma movbe &&
                 { has_cpu_flag lzcnt || has_cpu_flag abm; }; then
@@ -671,93 +877,20 @@ detect_core_arch() {
                 printf '%s\n' "linux-amd64-v1"
             fi
             ;;
-        i386 | i486 | i586 | i686)
-            printf '%s\n' "linux-386"
-            ;;
-        aarch64 | arm64)
-            printf '%s\n' "linux-arm64"
-            ;;
-        armv7l | armv7)
-            printf '%s\n' "linux-armv7"
-            ;;
-        armv6l | armv6)
-            printf '%s\n' "linux-armv6"
-            ;;
-        armv5tel | armv5)
-            printf '%s\n' "linux-armv5"
-            ;;
-        mips64)
-            printf '%s\n' "linux-mips64"
-            ;;
-        mips64el)
-            printf '%s\n' "linux-mips64le"
-            ;;
-        mips)
-            printf 'linux-mips-%s\n' "$(detect_mips_float)"
-            ;;
-        mipsel)
-            printf 'linux-mipsle-%s\n' "$(detect_mips_float)"
-            ;;
-        loongarch64)
-            printf 'linux-loong64-%s\n' "$(detect_loongarch_abi)"
-            ;;
-        riscv64)
-            printf '%s\n' "linux-riscv64"
-            ;;
-        s390x)
-            printf '%s\n' "linux-s390x"
-            ;;
-        *)
-            return 1
-            ;;
+        i386 | i486 | i586 | i686) printf '%s\n' "linux-386" ;;
+        aarch64 | arm64) printf '%s\n' "linux-arm64" ;;
+        armv7l | armv7) printf '%s\n' "linux-armv7" ;;
+        armv6l | armv6) printf '%s\n' "linux-armv6" ;;
+        armv5tel | armv5) printf '%s\n' "linux-armv5" ;;
+        mips64) printf '%s\n' "linux-mips64" ;;
+        mips64el) printf '%s\n' "linux-mips64le" ;;
+        mips) printf 'linux-mips-%s\n' "$(detect_mips_float)" ;;
+        mipsel) printf 'linux-mipsle-%s\n' "$(detect_mips_float)" ;;
+        loongarch64) printf 'linux-loong64-%s\n' "$(detect_loongarch_abi)" ;;
+        riscv64) printf '%s\n' "linux-riscv64" ;;
+        s390x) printf '%s\n' "linux-s390x" ;;
+        *) return 1 ;;
     esac
-}
-
-core_asset_exists() {
-    core_arch=$1
-    release_branch=$(uci -q get openclash.config.release_branch || printf '%s' dev)
-    core_type=$(get_effective_core_type)
-    if [ "$core_type" = "Smart" ]; then
-        core_dir="smart"
-    else
-        core_dir="meta"
-    fi
-
-    jsdelivr_url="https://testingcf.jsdelivr.net/gh/vernesong/OpenClash@core/${release_branch}/${core_dir}/clash-${core_arch}.tar.gz"
-    raw_url="https://raw.githubusercontent.com/vernesong/OpenClash/core/${release_branch}/${core_dir}/clash-${core_arch}.tar.gz"
-    proxy_url="${GH_PROXY_PREFIX}${raw_url}"
-
-    if curl -fsIL --retry 2 --connect-timeout 10 --max-time 30 \
-        "$jsdelivr_url" >/dev/null 2>&1; then
-        return 0
-    fi
-
-    if curl -fsIL --retry 2 --connect-timeout 10 --max-time 30 \
-        "$proxy_url" >/dev/null 2>&1; then
-        return 0
-    fi
-
-    if [ -n "$RAW_GITHUB_IP" ]; then
-        curl -fsIL --retry 2 --connect-timeout 10 --max-time 30 \
-            --resolve "raw.githubusercontent.com:443:$RAW_GITHUB_IP" \
-            "$raw_url" >/dev/null 2>&1
-    else
-        curl -fsIL --retry 2 --connect-timeout 10 --max-time 30 \
-            "$raw_url" >/dev/null 2>&1
-    fi
-}
-
-configure_core_arch() {
-    current=$(uci -q get openclash.config.core_version)
-    detected=$(detect_core_arch) || die "无法识别当前 CPU 架构。"
-    core_asset_exists "$detected" || die "官方仓库中不存在匹配的内核资源：$detected"
-
-    if [ "$current" != "$detected" ]; then
-        uci set openclash.config.core_version="$detected" ||
-            die "无法写入 core_version。"
-        uci commit openclash || die "无法提交 core_version。"
-    fi
-    log_ok "内核架构：$detected"
 }
 
 get_effective_core_type() {
@@ -768,102 +901,197 @@ get_effective_core_type() {
     printf '%s\n' "$core_type"
 }
 
-get_core_path() {
-    small_flash=$(uci -q get openclash.config.small_flash_memory)
-    if [ "$small_flash" = "1" ]; then
-        printf '%s\n' "/tmp/etc/openclash/core/clash_meta"
-    else
-        printf '%s\n' "$OPENCLASH_ETC_DIR/core/clash_meta"
-    fi
+configure_base_uci() {
+    detected_arch=$(detect_core_arch) || return 1
+    uci -q batch <<EOF
+set openclash.config.release_branch='dev'
+set openclash.config.github_address_mod='https://testingcf.jsdelivr.net/'
+set openclash.config.core_version='$detected_arch'
+set openclash.config.enable='1'
+EOF
+    uci commit openclash || return 1
+    ui_field "CPU / 内核架构" "$detected_arch"
+    ui_field "插件分支" "Dev"
+    ui_field "下载加速" "testingcf.jsdelivr.net"
+    log_ok "内核架构、插件分支和启用状态已写入。"
 }
 
-verify_core_version() {
-    core_type=$1
-    core_path=$(get_core_path)
-    [ -x "$core_path" ] || return 1
-    [ -s /tmp/clash_last_version ] || return 1
-
-    if [ "$core_type" = "Smart" ]; then
-        expected=$(sed -n '2p' /tmp/clash_last_version)
-    else
-        expected=$(sed -n '1p' /tmp/clash_last_version)
-    fi
-    actual=$("$core_path" -v 2>/dev/null | awk 'NR==1{print $3}')
-
-    [ -n "$expected" ] && [ "$actual" = "$expected" ]
-}
-
-update_core() {
+run_core_update() {
     core_script="$OPENCLASH_SHARE_DIR/openclash_core.sh"
-    [ -x "$core_script" ] || die "内核更新脚本不存在：$core_script"
-
+    [ -x "$core_script" ] || return 1
     core_type=$(get_effective_core_type)
-    for source in "https://testingcf.jsdelivr.net/" "$GH_PROXY_PREFIX" "0"; do
-        rm -f /tmp/clash_last_version
-        log_info "更新 $core_type 内核，下载源：$source"
-        "$core_script" "$core_type" "$source" >/dev/null 2>&1 || true
-
-        if verify_core_version "$core_type"; then
-            log_ok "$core_type 内核版本验证通过。"
-            return 0
-        fi
-        log_warn "$core_type 内核更新或版本验证失败，切换下载源。"
-    done
-
-    die "$core_type 内核更新失败。"
+    CORE_TYPE_USED=$core_type
+    ui_field "内核类型" "$core_type"
+    log_info "正在调用 OpenClash 内置内核更新流程……"
+    if run_logged "$core_script" "$core_type"; then
+        CORE_RESULT="内置更新流程已执行"
+        log_ok "内核更新流程已交由 OpenClash 处理。"
+    else
+        CORE_RESULT="内置流程返回警告"
+        log_warn "内核内置流程返回非零；详细结果请查看 $OPENCLASH_LOG。"
+    fi
+    ui_field "结果说明" "下载、解压和替换结果由 OpenClash 自身记录"
 }
 
-parse_release_asset_digest() {
-    html_file=$1
-    target_name=$2
-
-    awk -v target="$target_name" '
-        index($0, "/releases/download/LightGBM-Model/" target "\"") {
-            selected=1
-        }
-        selected && /sha256:[0-9a-f]/ {
-            digest=$0
-            sub(/^.*sha256:/, "", digest)
-            sub(/[^0-9a-f].*$/, "", digest)
-            if (length(digest) == 64 && digest !~ /[^0-9a-f]/) {
-                print digest
-                exit
-            }
-        }
-    ' "$html_file"
+enable_and_restart_openclash() {
+    [ -x "$OPENCLASH_INIT" ] || return 1
+    uci set openclash.config.enable='1' || return 1
+    uci commit openclash || return 1
+    run_logged "$OPENCLASH_INIT" enable || return 1
+    run_logged "$OPENCLASH_INIT" restart || return 1
+    SERVICE_RESULT="已启用并执行重启"
+    ui_field "开机自启" "已启用"
+    ui_field "配置状态" "enable=1"
+    ui_field "服务操作" "已执行重启"
+    log_ok "OpenClash 启用和重启命令执行完成。"
 }
 
-fetch_model_assets() {
-    output=$1
-    curl_download "$output" "$MODEL_ASSETS_URL" "github.com" "$GITHUB_COM_IP" ||
-        curl_download "$output" "$MODEL_ASSETS_URL" ||
-        curl_download "$output" "${GH_PROXY_PREFIX}${MODEL_ASSETS_URL}"
+configure_smart_features() {
+    [ "$(get_effective_core_type)" = "Smart" ] || {
+        SMART_RESULT="当前内核不是 Smart，未修改专用设置"
+        log_skip "当前内核不是 Smart，不需要写入 Smart 专用设置。"
+        return 0
+    }
+
+    uci -q batch <<EOF
+set openclash.config.auto_smart_switch='1'
+set openclash.config.lgbm_auto_update='1'
+EOF
+    uci commit openclash || return 1
+    SMART_RESULT="自动切换和模型自动更新已启用"
+    ui_field "自动切换" "已启用"
+    ui_field "模型自动更新" "已启用"
+    log_ok "Smart 专用设置已完成。"
 }
 
-fetch_remote_file_size() {
+model_target_path() {
+    if [ "$(uci -q get openclash.config.small_flash_memory)" = "1" ]; then
+        printf '%s\n' "/tmp/etc/openclash/Model.bin"
+    else
+        printf '%s\n' "$OPENCLASH_ETC_DIR/Model.bin"
+    fi
+}
+
+probe_model_size() {
     url=$1
-    headers_file="$TMP_DIR/remote-headers"
-    proxy_url="${GH_PROXY_PREFIX}${url}"
-    rm -f "$headers_file"
+    curl -fsSIL --connect-timeout 10 --max-time 30 "$url" 2>/dev/null |
+        tr -d '\r' |
+        awk 'tolower($1) == "content-length:" && $2 ~ /^[0-9]+$/ {size=$2} END {if (size > 0) print size}'
+}
 
-    if [ -n "$GITHUB_COM_IP" ]; then
-        curl -fsSIL --retry 3 --retry-delay 2 --connect-timeout 30 --max-time 120 \
-            --resolve "github.com:443:$GITHUB_COM_IP" \
-            -o /dev/null -D "$headers_file" "$url" || rm -f "$headers_file"
+parse_model_release_metadata() {
+    metadata_file=$1
+    candidate=$2
+    tr -d '\r\n\t ' <"$metadata_file" 2>/dev/null |
+        awk -v name="$candidate" '
+            {
+                key="\"name\":\"" name "\""
+                start=index($0, key)
+                if (!start) exit
+                tail=substr($0, start)
+                remainder=substr(tail, length(key) + 1)
+                next_name=index(remainder, "\"name\":\"")
+                if (next_name) tail=substr(tail, 1, length(key) + next_name - 1)
+
+                size_marker="\"size\":"
+                size_start=index(tail, size_marker)
+                if (!size_start) exit
+                size=substr(tail, size_start + length(size_marker))
+                sub(/[^0-9].*/, "", size)
+
+                digest_marker="\"digest\":\"sha256:"
+                digest_start=index(tail, digest_marker)
+                if (!digest_start) exit
+                digest_tail=substr(tail, digest_start + length(digest_marker))
+                digest_end=index(digest_tail, "\"")
+                if (!digest_end) exit
+                digest=substr(digest_tail, 1, digest_end - 1)
+
+                if (size ~ /^[0-9]+$/ && size > 0 &&
+                    digest ~ /^[0-9a-f]+$/ && length(digest) == 64) {
+                    print size, digest
+                }
+            }
+        '
+}
+
+fetch_model_release_metadata() {
+    MODEL_METADATA_FILE="$TMP_DIR/model-release.json"
+    rm -f "$MODEL_METADATA_FILE"
+    curl -fsSL --connect-timeout "${INTEGRITY_CONNECT_TIMEOUT:-3}" \
+        --max-time "${INTEGRITY_MAX_TIME:-8}" \
+        -H 'Accept: application/vnd.github+json' \
+        -H 'X-GitHub-Api-Version: 2022-11-28' \
+        -o "$MODEL_METADATA_FILE" \
+        'https://api.github.com/repos/vernesong/mihomo/releases/tags/LightGBM-Model' \
+        2>/dev/null && [ -s "$MODEL_METADATA_FILE" ]
+}
+
+verify_model_file() {
+    file=$1
+    expected_size=$2
+    expected_sha256=$3
+    MODEL_SHA256_VERIFIED=0
+    [ -s "$file" ] || return 1
+    [ "$(file_size_bytes "$file")" = "$expected_size" ] || return 1
+
+    [ -n "$expected_sha256" ] || return 0
+    if actual_sha256=$(file_sha256 "$file"); then
+        [ "$actual_sha256" = "$expected_sha256" ] || return 1
+        MODEL_SHA256_VERIFIED=1
+        return 0
+    else
+        log_info "设备缺少可用 SHA-256 工具，LightGBM 继续使用精确大小校验。"
+        return 0
     fi
-    if [ ! -s "$headers_file" ]; then
-        curl -fsSIL --retry 3 --retry-delay 2 --connect-timeout 30 --max-time 120 \
-            -o /dev/null -D "$headers_file" "$url" || rm -f "$headers_file"
+}
+
+curl_model_direct_fallback() {
+    output=$1
+    url=$2
+    rm -f "$output"
+    run_logged curl -fsSL --connect-timeout 5 --max-time 60 \
+        -o "$output" "$url" && [ -s "$output" ]
+}
+
+download_selected_model() {
+    output=$1
+    proxy_url="${GH_PROXY_PREFIX}${SELECTED_MODEL_URL}"
+    log_info "优先通过 v6.gh-proxy 下载 LightGBM：$SELECTED_MODEL"
+
+    if ! curl_download "$output" "$proxy_url"; then
+        return 1
     fi
-    if [ ! -s "$headers_file" ]; then
-        curl -fsSIL --retry 3 --retry-delay 2 --connect-timeout 30 --max-time 120 \
-            -o /dev/null -D "$headers_file" "$proxy_url" || return 1
+    if verify_model_file "$output" "$SELECTED_MODEL_SIZE" \
+        "$SELECTED_MODEL_SHA256"; then
+        MODEL_SOURCE="v6.gh-proxy"
+        return 0
     fi
 
-    tr -d '\r' <"$headers_file" | awk '
-        tolower($1) == "content-length:" && $2 ~ /^[0-9]+$/ && $2 > 0 { size=$2 }
-        END { if (size > 0) print size }
-    '
+    rm -f "$output"
+    [ -n "$SELECTED_MODEL_SHA256" ] || return 1
+    log_warn "代理返回的 LightGBM 与官方元数据不一致，尝试官方直连。"
+    if curl_model_direct_fallback "$output" "$SELECTED_MODEL_URL" &&
+        verify_model_file "$output" "$SELECTED_MODEL_SIZE" \
+            "$SELECTED_MODEL_SHA256"; then
+        MODEL_SOURCE="GitHub 官方直连"
+        return 0
+    fi
+    return 1
+}
+
+replace_smart_model() {
+    source=$1
+    target=$2
+    target_tmp=$3
+    if ! cp "$source" "$target_tmp" ||
+        ! verify_model_file "$target_tmp" "$SELECTED_MODEL_SIZE" \
+            "$SELECTED_MODEL_SHA256" ||
+        ! chmod 644 "$target_tmp" ||
+        ! mv -f "$target_tmp" "$target"; then
+        rm -f "$target_tmp"
+        return 1
+    fi
 }
 
 available_kb() {
@@ -872,319 +1100,208 @@ available_kb() {
 
 model_fits() {
     size_bytes=$1
-    required_kb=$((size_bytes / 1024 + 2048))
+    target_dir=$2
+    required_kb=$(((size_bytes + 1023) / 1024 + 2048))
     tmp_kb=$(available_kb "$TMP_DIR")
-    target_kb=$(available_kb "$OPENCLASH_ETC_DIR")
+    target_kb=$(available_kb "$target_dir")
     [ -n "$tmp_kb" ] && [ -n "$target_kb" ] &&
-        [ "$tmp_kb" -gt "$required_kb" ] &&
-        [ "$target_kb" -gt "$required_kb" ]
+        [ "$tmp_kb" -ge "$required_kb" ] &&
+        [ "$target_kb" -ge "$required_kb" ]
 }
 
-verify_sha256() {
-    file=$1
-    expected=$2
-    actual=$(sha256sum "$file" | awk '{print $1}')
-    [ -n "$actual" ] && [ "$actual" = "$expected" ]
+select_smart_model() {
+    target_dir=$1
+    SELECTED_MODEL=""
+    SELECTED_MODEL_SIZE=""
+    SELECTED_MODEL_URL=""
+    SELECTED_MODEL_SHA256=""
+
+    metadata_available=0
+    if fetch_model_release_metadata; then
+        metadata_available=1
+        log_info "已获取 LightGBM 官方大小与 SHA-256 元数据。"
+    else
+        log_info "LightGBM 官方元数据不可用，继续使用代理大小探测。"
+    fi
+
+    for candidate in Model-large.bin Model-middle.bin Model.bin; do
+        official_url="${MODEL_OFFICIAL_PREFIX}/${candidate}"
+        proxy_url="${GH_PROXY_PREFIX}${official_url}"
+        size=""
+        digest=""
+        if [ "$metadata_available" -eq 1 ]; then
+            metadata=$(parse_model_release_metadata "$MODEL_METADATA_FILE" "$candidate")
+            metadata_size=${metadata%% *}
+            metadata_digest=${metadata#* }
+            if [ -n "$metadata" ] && [ "$metadata_digest" != "$metadata" ]; then
+                size=$metadata_size
+                digest=$metadata_digest
+            fi
+        fi
+        [ -n "$size" ] || size=$(probe_model_size "$proxy_url")
+        [ -n "$size" ] || {
+            log_warn "无法探测 $candidate 的远端大小，跳过该候选。"
+            continue
+        }
+        if model_fits "$size" "$target_dir"; then
+            SELECTED_MODEL=$candidate
+            SELECTED_MODEL_SIZE=$size
+            SELECTED_MODEL_URL=$official_url
+            SELECTED_MODEL_SHA256=$digest
+            return 0
+        fi
+        log_warn "$candidate 所需空间不足，尝试更小模型。"
+    done
+    return 1
 }
 
 update_smart_model() {
     [ "$(get_effective_core_type)" = "Smart" ] || {
-        log_info "Smart 内核未启用，跳过 LGBM 模型。"
+        MODEL_RESULT="不适用（当前内核不是 Smart）"
         return 0
     }
-
-    uci set openclash.config.auto_smart_switch='1' ||
-        die "无法配置 Smart 自动切换。"
-    uci set openclash.config.lgbm_auto_update='1' ||
-        die "无法配置 LGBM 自动更新。"
-    uci commit openclash || die "无法提交 Smart 内核配置。"
-
     [ "$(uci -q get openclash.config.smart_enable_lgbm)" = "1" ] || {
-        log_info "LGBM 模型未启用，跳过模型下载。"
+        MODEL_RESULT="用户未启用，保留现状"
+        log_skip "用户未启用 LightGBM，保留现有设置和文件。"
         return 0
     }
 
-    mkdir -p "$OPENCLASH_ETC_DIR" || die "无法创建 OpenClash 数据目录。"
-
-    model_assets="$TMP_DIR/model-assets.html"
-    if ! fetch_model_assets "$model_assets"; then
-        if [ -s "$OPENCLASH_ETC_DIR/Model.bin" ]; then
-            log_warn "LGBM 模型元数据暂不可用，保留现有已安装模型。"
-            return 0
-        fi
-        die "无法获取 LGBM 模型元数据，且没有可保留的现有模型。"
-    fi
-
-    selected=""
-    for candidate in Model-large.bin Model-middle.bin Model.bin; do
-        digest=$(parse_release_asset_digest "$model_assets" "$candidate")
-        [ -n "$digest" ] || continue
-        url="${MODEL_DOWNLOAD_PREFIX}/${candidate}"
-        size=$(fetch_remote_file_size "$url")
-        [ -n "$size" ] || continue
-        if model_fits "$size"; then
-            selected=$candidate
-            break
-        fi
-    done
-
-    if [ -z "$selected" ]; then
-        if [ -s "$OPENCLASH_ETC_DIR/Model.bin" ]; then
-            log_warn "无法取得适配模型大小或空间不足，保留现有 LGBM 模型。"
-            return 0
-        fi
-        die "无法取得适配模型大小或空间不足，且没有可保留的 LGBM 模型。"
-    fi
-
-    model_tmp="$TMP_DIR/$selected"
-    proxy_url="${GH_PROXY_PREFIX}${url}"
-    log_info "下载 LGBM 模型：$selected"
-
-    if ! curl_download "$model_tmp" "$url" "github.com" "$GITHUB_COM_IP" ||
-        ! verify_file_size "$model_tmp" "$size" ||
-        ! verify_sha256 "$model_tmp" "$digest"; then
-        log_warn "GitHub 直链下载或校验失败，尝试反代。"
-        if ! curl_download "$model_tmp" "$proxy_url" ||
-            ! verify_file_size "$model_tmp" "$size" ||
-            ! verify_sha256 "$model_tmp" "$digest"; then
-            die "LGBM 模型下载或 SHA-256 校验失败。"
-        fi
-    fi
-
-    mv -f "$model_tmp" "$OPENCLASH_ETC_DIR/Model.bin" ||
-        die "无法安装 LGBM 模型。"
-    chmod 644 "$OPENCLASH_ETC_DIR/Model.bin" ||
-        die "无法设置 LGBM 模型权限。"
-
-    uci set openclash.config.lgbm_custom_url="$url" ||
-        die "无法配置 LGBM 模型 URL。"
-    uci commit openclash || die "无法提交 LGBM 模型配置。"
-    log_ok "LGBM 模型更新并校验完成：$selected"
-}
-
-log_line_count() {
-    if [ -f "$OPENCLASH_LOG" ]; then
-        wc -l <"$OPENCLASH_LOG" | tr -d ' '
-    else
-        printf '%s\n' "0"
-    fi
-}
-
-new_log_has_error() {
-    start_line=$1
-    [ -f "$OPENCLASH_LOG" ] || return 1
-    sed -n "$((start_line + 1)),\$p" "$OPENCLASH_LOG" |
-        grep -qE 'Update Error|Download Failed|Update Failed|Core Version Check Error|Unable To Parse|Format Validation Failed'
-}
-
-new_log_has_subscription_error() {
-    start_line=$1
-    [ -f "$OPENCLASH_LOG" ] || return 1
-    sed -n "$((start_line + 1)),\$p" "$OPENCLASH_LOG" |
-        grep -qE '【.*】Update Error, Please Try Again Later'
-}
-
-valid_data_file() {
-    file=$1
-    min_size=${2:-10240}
-    [ -s "$file" ] || return 1
-    size=$(wc -c <"$file" 2>/dev/null | tr -d ' ')
-    [ "$size" -ge "$min_size" ] || return 1
-    ! head -c 512 "$file" | grep -qiE '<!doctype|<html|<head|<body'
-}
-
-valid_mmdb_file() {
-    file=$1
-    valid_data_file "$file" 10240 || return 1
-    tail -c 256 "$file" 2>/dev/null | grep -q 'MaxMind.com'
-}
-
-validate_geo_databases() {
-    valid_data_file "$OPENCLASH_ETC_DIR/GeoIP.dat" &&
-        valid_data_file "$OPENCLASH_ETC_DIR/GeoSite.dat" &&
-        valid_mmdb_file "$OPENCLASH_ETC_DIR/ASN.mmdb" &&
-        valid_mmdb_file "$OPENCLASH_ETC_DIR/Country.mmdb"
-}
-
-run_geo_update_once() {
-    geo_script=$1
-    shift
-    start_line=$(log_line_count)
-    "$geo_script" "$@" >/dev/null 2>&1 || return 1
-    new_log_has_error "$start_line" && return 1
-    validate_geo_databases
-}
-
-update_geo_databases() {
-    geo_script="$OPENCLASH_SHARE_DIR/openclash_geo.sh"
-
-    if [ -x "$geo_script" ]; then
-        original_source=$(uci -q get openclash.config.github_address_mod)
-        ORIGINAL_GITHUB_MOD=$original_source
-        RESTORE_GITHUB_MOD=1
-        for source in "https://testingcf.jsdelivr.net/" "$GH_PROXY_PREFIX" "0"; do
-            uci set openclash.config.github_address_mod="$source" ||
-                die "无法切换 Geo 数据库下载源。"
-            uci commit openclash || die "无法提交 Geo 数据库下载源。"
-            log_info "更新 Geo 数据库，下载源：$source"
-            if run_geo_update_once "$geo_script" all; then
-                uci set openclash.config.github_address_mod="${original_source:-https://testingcf.jsdelivr.net/}" ||
-                    die "无法恢复 GitHub 下载源。"
-                uci commit openclash || die "无法提交 GitHub 下载源。"
-                RESTORE_GITHUB_MOD=0
-                log_ok "GeoIP、GeoSite、ASN 和 Country 数据库验证通过。"
-                return 0
-            fi
-            log_warn "Geo 数据库更新失败，切换下载源。"
-        done
-        uci set openclash.config.github_address_mod="${original_source:-https://testingcf.jsdelivr.net/}" ||
-            die "无法恢复 GitHub 下载源。"
-        uci commit openclash || die "无法提交 GitHub 下载源。"
-        RESTORE_GITHUB_MOD=0
-        die "Geo 数据库更新失败。"
-    fi
-
-    for legacy in \
-        openclash_geoip.sh \
-        openclash_ipdb.sh \
-        openclash_geosite.sh \
-        openclash_geoasn.sh; do
-        script="$OPENCLASH_SHARE_DIR/$legacy"
-        [ -x "$script" ] || die "数据库更新脚本不存在：$script"
-        start_line=$(log_line_count)
-        "$script" >/dev/null 2>&1 || die "执行数据库更新脚本失败：$legacy"
-        new_log_has_error "$start_line" && die "数据库更新失败：$legacy"
-    done
-
-    validate_geo_databases || die "数据库文件完整性验证失败。"
-    log_ok "旧版 Geo 数据库更新与验证完成。"
-}
-
-validate_chnroute() {
-    small_flash=$(uci -q get openclash.config.small_flash_memory)
-    if [ "$small_flash" = "1" ]; then
-        base="/tmp/etc/openclash"
-    else
-        base="$OPENCLASH_ETC_DIR"
-    fi
-    valid_data_file "$base/china_ip_route.ipset" 1024 &&
-        valid_data_file "$base/china_ip6_route.ipset" 256
-}
-
-update_chnroute() {
-    script="$OPENCLASH_SHARE_DIR/openclash_chnroute.sh"
-    [ -x "$script" ] || die "大陆 IP 更新脚本不存在：$script"
-    start_line=$(log_line_count)
-    "$script" >/dev/null 2>&1 || die "大陆 IP 更新脚本执行失败。"
-    new_log_has_error "$start_line" && die "大陆 IP 白名单更新失败。"
-    validate_chnroute || die "大陆 IP 白名单文件验证失败。"
-    log_ok "大陆 IPv4/IPv6 白名单更新与验证完成。"
-}
-
-update_subscriptions() {
-    script="$OPENCLASH_SHARE_DIR/openclash.sh"
-    [ -x "$script" ] || die "订阅更新脚本不存在：$script"
-
-    subscription_count=$(uci -q show openclash 2>/dev/null |
-        grep -c '=config_subscribe' || true)
-    if [ "$subscription_count" -eq 0 ]; then
-        log_info "未配置订阅，跳过订阅更新。"
+    target=$(model_target_path)
+    target_dir=${target%/*}
+    mkdir -p "$target_dir" || {
+        MODEL_RESULT="目标目录不可用，已保留现有模型"
+        log_warn "无法创建 LightGBM 目标目录，保留现有模型。"
+        return 0
+    }
+    if ! select_smart_model "$target_dir"; then
+        MODEL_RESULT="没有安全候选，已保留现有模型"
+        log_warn "没有可安全安装的 LightGBM 候选，保留现有模型。"
         return 0
     fi
 
-    start_line=$(log_line_count)
-    "$script" >/dev/null 2>&1 || die "订阅更新脚本执行失败。"
-    new_log_has_subscription_error "$start_line" && die "至少一个订阅更新失败。"
-    log_ok "订阅更新完成。"
+    download_tmp="$TMP_DIR/${SELECTED_MODEL}.download"
+    target_tmp="${target}.new.$$"
+
+    if ! download_selected_model "$download_tmp"; then
+        rm -f "$download_tmp"
+        MODEL_RESULT="下载或校验失败，已保留现有模型"
+        log_warn "LightGBM 下载或完整性校验失败，保留现有模型。"
+        return 0
+    fi
+
+    if ! replace_smart_model "$download_tmp" "$target" "$target_tmp"; then
+        MODEL_RESULT="原子替换失败，已保留现有模型"
+        log_warn "LightGBM 原子替换失败，保留现有模型。"
+        return 0
+    fi
+
+    uci set openclash.config.lgbm_custom_url="$SELECTED_MODEL_URL" ||
+        return 1
+    uci commit openclash || return 1
+    MODEL_RESULT="$SELECTED_MODEL 已更新"
+    ui_field "模型选择" "$SELECTED_MODEL"
+    ui_field "选择依据" "当前存储空间可安全容纳"
+    ui_field "下载来源" "$MODEL_SOURCE"
+    if [ "$MODEL_SHA256_VERIFIED" -eq 1 ]; then
+        ui_field "完整性检查" "官方文件大小和 SHA-256 均通过"
+    elif [ -n "$SELECTED_MODEL_SHA256" ]; then
+        ui_field "完整性检查" "官方文件大小检查通过；设备未提供 SHA-256 工具"
+    else
+        ui_field "完整性检查" "官方文件大小检查通过"
+    fi
+    ui_field "保存位置" "$target"
+    log_ok "LightGBM 模型已安全更新。"
 }
 
-apply_user_preset() {
-    [ -f "$OPENCLASH_PRESET" ] || return 0
-    log_info "执行用户个性化配置：$OPENCLASH_PRESET"
-    sh "$OPENCLASH_PRESET" || die "用户个性化配置执行失败。"
-    log_ok "用户个性化配置覆盖完成。"
+call_builtin_update() {
+    label=$1
+    script=$2
+    shift 2
+    [ -x "$script" ] || return 1
+    if run_logged "$script" "$@"; then
+        ui_field "$label" "已调用 OpenClash 内置更新流程"
+    else
+        ui_field "$label" "内置流程已返回，但带有警告"
+        log_warn "$label 内置脚本返回非零；请查看 $OPENCLASH_LOG。"
+    fi
 }
 
-start_openclash() {
-    [ -x "$OPENCLASH_INIT" ] || die "OpenClash 服务脚本不存在：$OPENCLASH_INIT"
+run_full_resource_updates() {
+    call_builtin_update "Geo 数据库" "$OPENCLASH_SHARE_DIR/openclash_geo.sh" all ||
+        return 1
+    call_builtin_update "大陆 IPv4/IPv6 列表" "$OPENCLASH_SHARE_DIR/openclash_chnroute.sh" ||
+        return 1
+    call_builtin_update "订阅" "$OPENCLASH_SHARE_DIR/openclash.sh" ||
+        return 1
 
-    uci set openclash.config.enable='1' || die "无法启用 OpenClash 配置。"
-    uci commit openclash || die "无法提交 OpenClash 启用状态。"
-    "$OPENCLASH_INIT" enable >/dev/null 2>&1 ||
-        die "设置 OpenClash 开机自启失败。"
-    "$OPENCLASH_INIT" restart >/dev/null 2>&1 ||
-        die "OpenClash 重启命令执行失败。"
-
-    waited=0
-    while [ "$waited" -lt 90 ]; do
-        sleep 3
-        waited=$((waited + 3))
-        status=$("$OPENCLASH_INIT" status 2>/dev/null)
-        if printf '%s\n' "$status" | grep -q 'running' && pidof clash >/dev/null 2>&1; then
-            log_ok "OpenClash 启动成功。"
-            return 0
+    if [ -f "$OPENCLASH_PRESET" ]; then
+        if run_logged sh "$OPENCLASH_PRESET"; then
+            PRESET_RESULT="已执行 $OPENCLASH_PRESET"
+            ui_field "用户预设" "已执行 $OPENCLASH_PRESET"
+        else
+            PRESET_RESULT="已执行，但返回警告"
+            log_warn "用户预设返回非零，请自行检查其内容。"
         fi
-        if printf '%s\n' "$status" | grep -qE 'inactive|dead|failed|stopped'; then
-            die "OpenClash 启动失败，服务状态：$status"
-        fi
-        [ $((waited % 15)) -eq 0 ] && log_info "等待 OpenClash 启动：${waited}/90 秒"
-    done
+    else
+        PRESET_RESULT="未检测到，已跳过"
+        ui_field "用户预设" "未检测到，已跳过"
+    fi
+    RESOURCE_RESULT="Geo、地区列表和订阅流程已执行"
+    log_ok "OpenClash 相关资源更新流程均已执行。"
+    log_info "远端下载的详细结果由 OpenClash 记录在 $OPENCLASH_LOG。"
+}
 
-    die "OpenClash 启动超时。"
+print_final_summary() {
+    printf '\n'
+    print_line
+    printf '%b\n' "${G}更新完成${N}"
+    print_line
+    ui_field "OpenClash 插件" "$TARGET_VERSION，安装并验证成功"
+    ui_field "软件源" "$FEED_RESTORE_RESULT"
+    ui_field "内核" "$CORE_TYPE_USED，$CORE_RESULT"
+    ui_field "Smart 设置" "$SMART_RESULT"
+    ui_field "LightGBM" "$MODEL_RESULT"
+    ui_field "Geo / Chnroute / 订阅" "$RESOURCE_RESULT"
+    ui_field "用户预设" "$PRESET_RESULT"
+    ui_field "OpenClash 服务" "$SERVICE_RESULT"
+    ui_field "警告" "$WARNING_COUNT"
+    printf '\n'
+    ui_field "OpenClash 详细日志" "$OPENCLASH_LOG"
+    ui_field "本次运行日志" "$INSTALLER_LOG"
+    print_line
 }
 
 main() {
     logo
-    log_info "即将安装或升级 OpenClash Dev，并验证所有配套资源。"
     init_runtime
 
-    print_step "步骤 1/8: 系统环境检测"
+    print_step 1 "检测设备环境"
     detect_environment
-    installed=$(get_installed_version)
-    if [ -n "$installed" ]; then
-        log_ok "已安装 OpenClash v$installed"
-    else
-        log_info "当前未安装 OpenClash。"
-    fi
 
-    print_step "步骤 2/8: 安装依赖"
-    install_dependencies
+    print_step 2 "准备软件源和运行依赖"
+    install_dependencies || die "软件索引更新或依赖安装失败。"
     check_required_commands
 
-    print_step "步骤 3/8: 获取 GitHub 网络信息"
-    get_github_hosts
+    print_step 3 "获取并安装 OpenClash 插件"
+    install_latest_openclash_package ||
+        die "无法锁定、校验或覆盖重装 OpenClash Dev 插件。"
 
-    print_step "步骤 4/8: 下载并安装 OpenClash Dev"
-    package_file="$TMP_DIR/openclash.$EXT"
-    install_latest_openclash_package "$package_file" ||
-        die "无法锁定并安装官方 package 分支的最新 .$EXT 安装包。"
+    print_step 4 "配置并更新 OpenClash 内核"
+    configure_base_uci || die "OpenClash 基础 UCI 配置失败。"
+    run_core_update || die "OpenClash 内置内核脚本不存在或不可执行。"
 
-    print_step "步骤 5/8: 初始化配置与架构"
-    uci set openclash.config.release_branch='dev' ||
-        die "无法配置 OpenClash Dev 分支。"
-    uci set openclash.config.skip_safe_path_check='1' ||
-        die "无法配置安全路径检查选项。"
-    uci set openclash.config.github_address_mod='https://testingcf.jsdelivr.net/' ||
-        die "无法配置 GitHub 下载源。"
-    uci commit openclash || die "基础配置提交失败。"
-    configure_core_arch
+    print_step 5 "处理 Smart 和 LightGBM"
+    configure_smart_features || die "Smart 专用 UCI 配置失败。"
+    update_smart_model || die "LightGBM UCI 配置失败。"
 
-    print_step "步骤 6/8: 更新内核与 Smart 模型"
-    update_core
-    update_smart_model
+    print_step 6 "更新 OpenClash 相关资源"
+    run_full_resource_updates ||
+        die "OpenClash 所需内置资源脚本不存在或不可执行。"
 
-    print_step "步骤 7/8: 更新数据库、订阅和个性化配置"
-    update_geo_databases
-    update_chnroute
-    update_subscriptions
-    apply_user_preset
+    print_step 7 "启用并重启 OpenClash"
+    enable_and_restart_openclash || die "启用或重启 OpenClash 失败。"
 
-    print_step "步骤 8/8: 启动并验证服务"
-    start_openclash
-
-    printf '\n'
-    print_line
-    printf '%b\n' "${G}[OK] OpenClash Dev 安装、更新和验证全部完成。${N}"
+    print_final_summary
 }
 
 if [ "${OPENCLASH_INSTALLER_LIB_ONLY:-0}" != "1" ]; then

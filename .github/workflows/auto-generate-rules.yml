@@ -1,6 +1,12 @@
 name: Auto generate rules
 
 on:
+  workflow_call:
+    inputs:
+      source_before_sha:
+        description: Source-list parent revision supplied by an updater workflow
+        required: false
+        type: string
   push:
     branches:
       - main
@@ -9,8 +15,24 @@ on:
       - 'rule/Custom_Proxy.list'
       - 'rule/Steam_CDN.list'
       - 'rule/Encrypted_DNS.list'
+      - 'rule/Game_Download_CDN.list'
+      - 'rule/game_rule/**/*.list'
       - 'py/generate_rules.py'
+      - 'py/generate_stash_configs.py'
+      - 'cfg/Custom_Clash.ini'
+      - 'cfg/Custom_Clash_Fallback.ini'
+      - 'cfg/Custom_Clash_Lite.ini'
+      - 'cfg/Custom_Clash_Lite_Fallback.ini'
+      - 'cfg/Custom_Clash_GFW.ini'
+      - 'cfg/Custom_Clash_GFW_Fallback.ini'
+      - 'cfg/Custom_Clash_Full.ini'
+      - 'cfg/Custom_Clash_Full_Fallback.ini'
   workflow_dispatch:
+    inputs:
+      source_before_sha:
+        description: Source-list parent revision supplied by an updater workflow
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -23,6 +45,9 @@ jobs:
   generate-rules:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      purge_base_sha: ${{ steps.publication-range.outputs.purge_base_sha }}
+      publication_sha: ${{ steps.publish.outputs.publication_sha }}
 
     steps:
       - name: Checkout latest main branch
@@ -36,44 +61,168 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Download and verify Mihomo
+      - name: Record source publication range
+        id: publication-range
         env:
-          MIHOMO_VERSION: v1.19.18
-          MIHOMO_SHA256: bbad6c9fa6322d870e94aab34b54097ffc880829be8fd804de79543d87f1f8e5
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before }}
+          REQUEST_BEFORE: ${{ inputs.source_before_sha }}
         run: |
-          archive="mihomo-linux-amd64-${MIHOMO_VERSION}.gz"
-          wget -q "https://github.com/MetaCubeX/mihomo/releases/download/${MIHOMO_VERSION}/${archive}"
-          printf '%s  %s\n' "$MIHOMO_SHA256" "$archive" | sha256sum --check --strict
-          gunzip "$archive"
-          install -m 0755 "${archive%.gz}" "$RUNNER_TEMP/mihomo"
-          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          if [ "$EVENT_NAME" = "push" ]; then
+            purge_base_sha="$EVENT_BEFORE"
+          else
+            purge_base_sha="$REQUEST_BEFORE"
+          fi
 
-      - name: Generate YAML and MRS providers
-        run: python py/generate_rules.py --mihomo mihomo
+          if [ -z "$purge_base_sha" ]; then
+            purge_base_sha="$(git rev-parse HEAD^)"
+          elif [ "${purge_base_sha//0/}" != "" ]; then
+            purge_base_sha="$(git rev-parse "${purge_base_sha}^{commit}")"
+          fi
+
+          echo "Source publication base: $purge_base_sha"
+          echo "purge_base_sha=$purge_base_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Set up pinned Mihomo
+        uses: ./.github/actions/setup-mihomo
+
+      - name: Generate derived rules and Mainland compatibility template
+        run: |
+          python py/generate_rules.py --mihomo mihomo
+          python py/generate_stash_configs.py --target mainland
 
       - name: Test generation and conversion logic
-        run: python py/generate_rules.py --check --mihomo mihomo
+        run: |
+          python py/generate_rules.py --check --mihomo mihomo
+          python py/generate_stash_configs.py --check --target mainland
 
       - name: Commit and push changes
+        id: publish
+        shell: bash
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Rule-Bot may push while this job is running. Regenerate from the
-          # newest source instead of rebasing stale derived files over it.
-          git fetch origin main
-          if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+          generated_pathspecs=(
+            ':(glob)rule/*.yaml'
+            ':(glob)rule/*.mrs'
+            ':(glob)rule/game_rule/**/*.yaml'
+            ':(glob)rule/game_rule/**/*.mrs'
+            'cfg/Custom_Clash_Mainland.ini'
+          )
+          generated_excludes=(
+            ':(exclude,glob)rule/*.yaml'
+            ':(exclude,glob)rule/*.mrs'
+            ':(exclude,glob)rule/game_rule/**/*.yaml'
+            ':(exclude,glob)rule/game_rule/**/*.mrs'
+            ':(exclude)cfg/Custom_Clash_Mainland.ini'
+          )
+          remote_main_sha() {
+            git ls-remote --exit-code origin refs/heads/main |
+              awk 'NR == 1 { print $1 }'
+          }
+
+          publication_sha=""
+          for attempt in 1 2 3; do
+            echo "Generation and publication attempt ${attempt}/3"
+            git fetch --no-tags origin main
             git reset --hard origin/main
             python py/generate_rules.py --mihomo mihomo
             python py/generate_rules.py --check --mihomo mihomo
+            python py/generate_stash_configs.py --target mainland
+            python py/generate_stash_configs.py --check --target mainland
+
+            unexpected_changes="$(
+              git status --short --untracked-files=all -- . \
+                "${generated_excludes[@]}"
+            )"
+            if [ -n "$unexpected_changes" ]; then
+              echo "Generator modified files outside the derived-rule allowlist:" >&2
+              printf '%s\n' "$unexpected_changes" >&2
+              exit 1
+            fi
+
+            base_sha="$(git rev-parse HEAD)"
+            git add -A -- "${generated_pathspecs[@]}"
+
+            if git diff --cached --quiet; then
+              remote_sha="$(remote_main_sha)"
+              if [ "$remote_sha" = "$base_sha" ]; then
+                echo "No generated rule changes, skip commit and push."
+                publication_sha="$base_sha"
+                break
+              fi
+              echo "main advanced before the no-op result was confirmed; retrying."
+              continue
+            fi
+
+            git commit -m "chore(rules): auto generate derived rule files"
+            candidate_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              remote_sha="$(remote_main_sha)"
+              if [ "$remote_sha" = "$candidate_sha" ]; then
+                publication_sha="$candidate_sha"
+                break
+              fi
+              echo "main advanced after publication; regenerating from its new head."
+              continue
+            fi
+
+            remote_sha="$(remote_main_sha)"
+            if [ "$remote_sha" = "$base_sha" ]; then
+              echo "Push failed without a competing main update; refusing to hide the error." >&2
+              exit 1
+            fi
+            echo "Push raced with a newer main revision; regenerating and retrying."
+          done
+
+          if [ -z "$publication_sha" ]; then
+            echo "Could not publish derived rules after 3 attempts." >&2
+            exit 1
           fi
 
-          git add -- rule/*.yaml rule/*.mrs
+          echo "Final revision to publish: $publication_sha"
+          echo "publication_sha=$publication_sha" >> "$GITHUB_OUTPUT"
 
-          if git diff --cached --quiet; then
-            echo "No generated rule changes, skip commit and push."
-            exit 0
+  sync-stash:
+    needs: generate-rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Request generated Stash template sync
+        env:
+          GH_TOKEN: ${{ secrets.TARGET_REPO_TOKEN }}
+          SOURCE_SHA: ${{ needs.generate-rules.outputs.publication_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$GH_TOKEN" ]; then
+            echo "TARGET_REPO_TOKEN is required for cross-repository dispatch." >&2
+            exit 1
           fi
+          jq -n \
+            --arg source_sha "$SOURCE_SHA" \
+            '{
+              event_type: "sync-generated-stash",
+              client_payload: {source_sha: $source_sha}
+            }' |
+            gh api \
+              --method POST \
+              repos/Aethersailor/Custom_Stash_Rules/dispatches \
+              --input -
 
-          git commit -m "chore(rules): auto generate derived rule files"
-          git push origin HEAD:main
+  # Generation and format validation already ran against the exact worktree that
+  # was published. Purge its changed cache keys without re-running unrelated tests.
+  purge-generated:
+    needs: generate-rules
+    permissions:
+      contents: read
+    uses: ./.github/workflows/purge-jsdelivr.yml
+    secrets: inherit
+    with:
+      before_sha: ${{ needs.generate-rules.outputs.purge_base_sha }}
+      after_sha: ${{ needs.generate-rules.outputs.publication_sha }}
+      generation_complete: true

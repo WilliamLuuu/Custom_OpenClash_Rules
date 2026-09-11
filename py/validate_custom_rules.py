@@ -15,6 +15,7 @@ CUSTOM_RULE_FILES = (
     "Adobe.list",
     "Betting-Direct.list",
     "Betting-Proxy.list",
+    "Betting-Proxy-Region2.list",
     "Crypto.list",
     "Emby-LyreBird.list",
     "PCDN.list",
@@ -34,7 +35,7 @@ DIRECT_FILES = (
     "VPN-PeiQianJiChang.list",
     "VPN-Yuyujc.list",
 )
-PROXY_FILES = ("Betting-Proxy.list", "Score-Proxy.list")
+PROXY_FILES = ("Betting-Proxy.list", "Betting-Proxy-Region2.list", "Score-Proxy.list")
 DOMAIN_TYPES = {"DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "DOMAIN-REGEX"}
 IP_TYPES = {"IP-CIDR", "IP-CIDR6"}
 BUILTIN_POLICIES = {"DIRECT", "REJECT"}
