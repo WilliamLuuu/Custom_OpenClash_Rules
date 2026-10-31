@@ -37,6 +37,19 @@ MRS 当前只用于 `domain` 和 `ipcidr` Rule Provider。Classical 与端口规
 | 文件 | 状态 | 说明 |
 | --- | --- | --- |
 | [`Custom_Port_Direct.yaml`](Custom_Port_Direct.yaml) | 使用中 | 定义 80、443 以外的目标端口范围；当前配置将其交给「非标端口」策略组，不由 `.list` 生成 |
+| `Adobe.list` | 使用中 | REJECT 广告拦截规则，仅本地维护 |
+| `Betting-Direct.list` | 使用中 | 博彩直连域名，仅本地维护，允许 `DOMAIN-KEYWORD` |
+| `Betting-Proxy.list` | 使用中 | 博彩代理域名，仅本地维护，优先级不得与 DIRECT 侧重叠 |
+| `Score-Direct.list` | 使用中 | 比分直连域名，仅本地精确规则 |
+| `Score-Proxy.list` | 使用中 | 比分代理域名，仅本地精确规则 |
+| `Crypto.list` | 使用中 | 加密货币相关域名，仅本地维护 |
+| `Emby-LyreBird.list` | 使用中 | LyreBird Emby 域名，仅本地维护 |
+| `PCDN.list` | 使用中 | PCDN 拦截规则，外部源更新加本地补充 |
+| `UK-WiFi-Calling.list` | 使用中 | 英国 WiFi Calling 域名，外部源更新加本地补充 |
+| `VPN-LyreBird.list` | 使用中 | LyreBird VPN 域名，仅本地维护 |
+| `VPN-NiceDuck.list` | 使用中 | NiceDuck VPN 域名，仅本地维护 |
+| `VPN-PeiQianJiChang.list` | 使用中 | PeiQianJiChang VPN 域名，仅本地维护 |
+| `VPN-Yuyujc.list` | 使用中 | Yuyujc VPN 域名，仅本地维护 |
 | [`Lan.list`](Lan.list) | 独立保留 | LAN 规则集合；当前主配置未直接引用 |
 | [`IPTVMainland_Domain.list`](IPTVMainland_Domain.list) | 独立保留 | IPTV 域名历史列表；当前没有自动更新流程，主配置未直接引用 |
 | [`Talkatone.list`](Talkatone.list) | 历史兼容 | 已停止更新；当前 Full 配置改用 `geosite:talkatone` |
