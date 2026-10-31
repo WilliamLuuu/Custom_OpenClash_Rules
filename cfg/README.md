@@ -103,13 +103,13 @@ OpenClash `dev` 版通常可直接从内置列表选择全部 8 个模板。以�
 加速地址（`cdn.jsdelivr.net`）：
 
 ```text
-https://cdn.jsdelivr.net/gh/Aethersailor/Custom_OpenClash_Rules@main/cfg/Custom_Clash.ini
+https://cdn.jsdelivr.net/gh/WilliamLuuu/Custom_OpenClash_Rules@custom/cfg/Custom_Clash.ini
 ```
 
 GitHub Raw 地址：
 
 ```text
-https://raw.githubusercontent.com/Aethersailor/Custom_OpenClash_Rules/refs/heads/main/cfg/Custom_Clash.ini
+https://raw.githubusercontent.com/WilliamLuuu/Custom_OpenClash_Rules/refs/heads/custom/cfg/Custom_Clash.ini
 ```
 
 <a id="标准-fallback-版"></a>
