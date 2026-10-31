@@ -1,0 +1,17 @@
+# NAME: Crypto
+# AUTHOR: WilliamLuuu
+# REPO: https://github.com/WilliamLuuu/Custom_OpenClash_Rules
+# 虚拟币域名列表，来自个人收集
+
+# OKX
+DOMAIN,www.okx.com.cdn.cloudflare.net
+DOMAIN-SUFFIX,oklink.com
+DOMAIN-KEYWORD,coinall
+DOMAIN,web3.okx.com.cdn.cloudflare.net
+
+# Binance
+DOMAIN-SUFFIX,binance.com
+DOMAIN-SUFFIX,binance.info
+DOMAIN-KEYWORD,bnbstatic
+DOMAIN-KEYWORD,saasexch
+DOMAIN-SUFFIX,walletconnect.org

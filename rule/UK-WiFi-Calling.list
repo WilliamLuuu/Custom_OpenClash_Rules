@@ -1,0 +1,20 @@
+# NAME: UK-Wifi-Calling
+# AUTHOR: 喬苑
+# REPO: t.me/Qiao_blog
+# UK-Wifi-Calling代理列表，来自t.me/Qiao_blog
+
+# Giffgaff
+DOMAIN-SUFFIX,giffgaff.com
+DOMAIN-SUFFIX,giffgaff.design
+IP-CIDR,87.194.0.0/16,no-resolve
+
+# Vodafone
+DOMAIN-SUFFIX,epdg.epc.mnc015.mcc234.pub.3gppnetwork.org
+DOMAIN-SUFFIX,ss.epdg.epc.mnc015.mcc234.pub.3gppnetwork.org
+DOMAIN-SUFFIX,ss.epdg.epc.geo.mnc015.mcc234.pub.3gppnetwork.org
+DOMAIN-SUFFIX,entsrv-uk.vodafone.com
+DOMAIN-SUFFIX,vuk-gto.prod.ondemandconnectivity.com
+IP-CIDR,88.82.0.0/19,no-resolve
+
+# CMLinkUK EE
+IP-CIDR,46.68.0.0/17,no-resolve
